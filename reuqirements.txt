@@ -1,0 +1,12 @@
+openai
+langchain
+langchain-core
+langchain-experimental
+chromadb
+numpy==1.26.4
+jieba
+datasets==2.21.0
+modelscope
+jq
+sortedcontainers
+transformers==4.41.0
