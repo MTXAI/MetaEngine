@@ -6,11 +6,11 @@
 from openai import OpenAI
 
 
-client = OpenAI(
-    # one api 生成的令牌
-    api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
-    base_url="http://localhost:3000/v1"
-)
+# client = OpenAI(
+#     # one api 生成的令牌
+#     api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
+#     base_url="http://localhost:3000/v1"
+# )
 # chat_completion = client.chat.completions.create(
 #     # model="doubao-1.5-lite-32k",
 #     model="qwen-turbo",
@@ -101,12 +101,3 @@ class ConversationBufferDBMemory(BaseChatMemory):
     def clear(self) -> None:
         """Nothing to clear, got a memory like a vault."""
         pass
-
-
-## Prompt
-
-
-
-## Agent
-
-
