@@ -12,10 +12,13 @@ from langchain.prompts.chat import ChatPromptTemplate
 
 from engine.human.agent.chat.utils import History
 from engine.human.agent.core.settings import Settings
-from engine.human.agent.core.utils import get_default_llm, BaseResponse
-from engine.human.agent.kb import search_docs
-from engine.human.agent.kb_service import KBServiceFactory
+from engine.human.agent.core.utils import get_default_llm, BaseResponse, api_address, get_ChatOpenAI, \
+    get_prompt_template, wrap_done
+from engine.human.agent.kb.kb import search_docs
+from engine.human.agent.kb.utils import format_reference
+from engine.human.agent.kb.kb_service import KBServiceFactory
 from engine.human.agent.utils import build_logger
+from server.api_schemas import OpenAIChatOutput
 
 logger = build_logger()
 
@@ -77,20 +80,20 @@ async def kb_chat(query: str = Body(..., description="用户输入", examples=["
                                                 file_name="",
                                                 metadata={})
                 source_documents = format_reference(kb_name, docs, api_address(is_public=True))
-            elif mode == "temp_kb":
-                ok, msg = check_embed_model()
-                if not ok:
-                    raise ValueError(msg)
-                docs = await run_in_threadpool(search_temp_docs,
-                                                kb_name,
-                                                query=query,
-                                                top_k=top_k,
-                                                score_threshold=score_threshold)
-                source_documents = format_reference(kb_name, docs, api_address(is_public=True))
-            elif mode == "search_engine":
-                result = await run_in_threadpool(search_engine, query, top_k, kb_name)
-                docs = [x.dict() for x in result.get("docs", [])]
-                source_documents = [f"""出处 [{i + 1}] [{d['metadata']['filename']}]({d['metadata']['source']}) \n\n{d['page_content']}\n\n""" for i,d in enumerate(docs)]
+            # elif mode == "temp_kb":
+            #     ok, msg = check_embed_model()
+            #     if not ok:
+            #         raise ValueError(msg)
+            #     docs = await run_in_threadpool(search_temp_docs,
+            #                                     kb_name,
+            #                                     query=query,
+            #                                     top_k=top_k,
+            #                                     score_threshold=score_threshold)
+            #     source_documents = format_reference(kb_name, docs, api_address(is_public=True))
+            # elif mode == "search_engine":
+            #     result = await run_in_threadpool(search_engine, query, top_k, kb_name)
+            #     docs = [x.dict() for x in result.get("docs", [])]
+            #     source_documents = [f"""出处 [{i + 1}] [{d['metadata']['filename']}]({d['metadata']['source']}) \n\n{d['page_content']}\n\n""" for i,d in enumerate(docs)]docs
             else:
                 docs = []
                 source_documents = []
@@ -118,16 +121,16 @@ async def kb_chat(query: str = Body(..., description="用户输入", examples=["
             callback = AsyncIteratorCallbackHandler()
             callbacks = [callback]
 
-            # Enable langchain-chatchat to support langfuse
-            import os
-            langfuse_secret_key = os.environ.get('LANGFUSE_SECRET_KEY')
-            langfuse_public_key = os.environ.get('LANGFUSE_PUBLIC_KEY')
-            langfuse_host = os.environ.get('LANGFUSE_HOST')
-            if langfuse_secret_key and langfuse_public_key and langfuse_host :
-                from langfuse import Langfuse
-                from langfuse.callback import CallbackHandler
-                langfuse_handler = CallbackHandler()
-                callbacks.append(langfuse_handler)
+            # # Enable langchain-chatchat to support langfuse
+            # import os
+            # langfuse_secret_key = os.environ.get('LANGFUSE_SECRET_KEY')
+            # langfuse_public_key = os.environ.get('LANGFUSE_PUBLIC_KEY')
+            # langfuse_host = os.environ.get('LANGFUSE_HOST')
+            # if langfuse_secret_key and langfuse_public_key and langfuse_host :
+            #     from langfuse import Langfuse
+            #     from langfuse.callback import CallbackHandler
+            #     langfuse_handler = CallbackHandler()
+            #     callbacks.append(langfuse_handler)
 
             if max_tokens in [None, 0]:
                 max_tokens = Settings.model_settings.MAX_TOKENS

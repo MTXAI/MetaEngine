@@ -29,7 +29,7 @@ from langchain_openai.llms import OpenAI
 from memoization import cached, CachingAlgorithmFlag
 
 import requests
-from pydantic import Field
+from chatchat.server.pydantic_v2 import Field
 
 from engine.human.agent.core.settings import XF_MODELS_TYPES, Settings
 from engine.human.agent.db import BaseModel

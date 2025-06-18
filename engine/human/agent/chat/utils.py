@@ -3,7 +3,7 @@ from functools import lru_cache
 from typing import Dict, List, Tuple, Union
 
 from langchain.prompts.chat import ChatMessagePromptTemplate
-from pydantic import BaseModel, Field
+from chatchat.server.pydantic_v2 import BaseModel, Field
 
 class History(BaseModel):
     """

@@ -8,15 +8,14 @@ import os
 from datetime import datetime
 from typing import List, Literal, Dict, Optional
 
-from engine.human.agent.chat.kb_chat import logger
 from engine.human.agent.core.settings import Settings
 from engine.human.agent.core.utils import get_default_embedding
 from engine.human.agent.db import list_kbs_from_db
-from engine.human.agent.kb_service import KnowledgeFile, files2docs_in_thread, list_kbs_from_folder, KBServiceFactory, \
+from engine.human.agent.kb.kb_service import KnowledgeFile, files2docs_in_thread, list_kbs_from_folder, KBServiceFactory, \
     list_files_from_folder, SupportedVSType, get_file_path, validate_kb_name, DocumentWithVSId, KBService
+from engine.human.agent.utils import build_logger
 
-
-
+logger = build_logger()
 def file_to_kbfile(kb_name: str, files: List[str]) -> List[KnowledgeFile]:
     kb_files = []
     for file in files:
@@ -168,8 +167,6 @@ def prune_folder_files(kb_names: List[str]):
 
 
 ## KB
-from pydantic import BaseModel, Field
-from typing import Any
 
 
 def list_kbs():

@@ -5,20 +5,25 @@
 
 ## KB Utils
 from typing import *
-
+from collections import OrderedDict
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import TextSplitter
 from langchain.docstore.document import Document
 
 from engine.human.agent.core.settings import Settings
-from engine.human.agent.core.utils import get_default_embedding, get_Embeddings
+from engine.human.agent.core.utils import get_default_embedding, get_Embeddings, run_in_thread_pool
 from engine.human.agent.db import add_kb_to_db, delete_files_from_db, delete_kb_from_db, add_file_to_db, \
     delete_file_from_db, file_exists_in_db, list_files_from_db, count_files_from_db, list_docs_from_db, \
     list_kbs_from_db, kb_exists, KnowledgeBaseSchema, get_file_detail, load_kb_from_db
+from engine.human.agent.file_rag.utils import get_Retriever
 from engine.human.agent.rag import SUPPORTED_EXTS, get_LoaderClass, get_loader, make_text_splitter, zh_title_enhance
 from langchain.docstore.document import Document
 
 from engine.human.agent.utils import build_logger
+from engine.human.agent.core.utils import (
+    check_embed_model as _check_embed_model,
+    get_default_embedding,
+)
 
 logger = build_logger()
 class DocumentWithVSId(Document):
