@@ -1,6 +1,5 @@
 import asyncio
-import time
-from typing import Any, AsyncGenerator, Callable, Dict, List
+from typing import Any, Callable, List
 
 
 class PipelineCallback:
@@ -207,7 +206,7 @@ class AsyncPipeline:
 if __name__ == '__main__':
 
     async def main():
-        from openai import OpenAI, AsyncOpenAI
+        from openai import AsyncOpenAI
         client = AsyncOpenAI(
             # one api 生成的令牌
             api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
