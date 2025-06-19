@@ -8,7 +8,7 @@ import pyaudio
 from dashscope.audio.tts_v2 import *
 from funasr import AutoModel
 
-from engine.utils.async_utils import AsyncPipeline, AsyncBridgeConsumer, PipelineCallback, PipelineCallBackWithEvent, \
+from engine.utils.async_utils import AsyncPipeline, AsyncBridgeConsumer, PipelineCallback, \
     AsyncConsumerFactory
 
 # 若没有将API Key配置到环境变量中，需将下面这行代码注释放开，并将apiKey替换为自己的API Key
@@ -69,27 +69,7 @@ def get_file_path(__file):
     return Path(__file)
 
 async def producer():
-    ## todo 实现实时转换麦克风语音
-    # """Generator that yields blocks of input data as NumPy arrays."""
-    # q_in = asyncio.Queue()
-    # loop = asyncio.get_event_loop()
-    #
-    # def callback(indata, frame_count, time_info, status):
-    #     loop.call_soon_threadsafe(q_in.put_nowait, (indata.copy(), status))
-    #
-    # stream = sounddevice.InputStream(callback=callback, channels=1)
-    # with stream:
-    #     while True:
-    #         indata, status = await q_in.get()
-    #         print(status)
-    #         yield {
-    #             'speech': indata,
-    #             'is_final': status,
-    #         }
-    #
-    #
-    wav_path = get_file_path(__file__).parent / "../../engine-bak/human/asr/asr_example.wav"
-    # wav_path = get_file_path(__file__).parent / "../../engine-bak/human/test_datas/asr.wav"
+    wav_path = get_file_path(__file__).parent / "test_datas/asr_example.wav"
     wav_file = wav_path.absolute().as_posix()
     speech, sample_rate = soundfile.read(wav_file)
     chunk_stride = chunk_size[1] * 960  # 600ms
@@ -161,7 +141,7 @@ async def bridge_producer(data):
         yield content
 
 stop_event = asyncio.Event()
-callback = PipelineCallBackWithEvent(stop_event=stop_event)
+callback = PipelineCallback.with_events(stop_event=stop_event)
 pipeline_bridge = AsyncBridgeConsumer(
     stop_event=stop_event,
     generator=bridge_producer,

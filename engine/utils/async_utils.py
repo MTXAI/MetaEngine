@@ -12,29 +12,42 @@ class PipelineCallback:
     def on_stop(self):
         pass
 
-class PipelineCallBackWithEvent(PipelineCallback):
-    def __init__(
-            self,
-            start_event: asyncio.Event=None,
-            error_event: asyncio.Event=None,
-            stop_event: asyncio.Event=None,
+    @staticmethod
+    def with_events(
+        start_event: asyncio.Event = None,
+        error_event: asyncio.Event = None,
+        stop_event: asyncio.Event = None,
     ):
-        super().__init__()
-        self.start_event = start_event
-        self.error_event = error_event
-        self.stop_event = stop_event
+        class _PipelineCallBackWithEvent(PipelineCallback):
+            def __init__(
+                    self,
+                    start_event: asyncio.Event = None,
+                    error_event: asyncio.Event = None,
+                    stop_event: asyncio.Event = None,
+            ):
+                super().__init__()
+                self.start_event = start_event
+                self.error_event = error_event
+                self.stop_event = stop_event
 
-    def on_start(self):
-         if self.start_event:
-             self.start_event.set()
+            def on_start(self):
+                if self.start_event:
+                    self.start_event.set()
 
-    def on_error(self, e: Exception):
-        if self.error_event:
-            self.error_event.set()
+            def on_error(self, e: Exception):
+                if self.error_event:
+                    self.error_event.set()
 
-    def on_stop(self):
-        if self.stop_event:
-            self.stop_event.set()
+            def on_stop(self):
+                if self.stop_event:
+                    self.stop_event.set()
+
+        return _PipelineCallBackWithEvent(
+            start_event=start_event,
+            error_event=error_event,
+            stop_event=stop_event,
+        )
+
 
 class AsyncConsumer:
     def __init__(self, handler: Callable=None):
@@ -250,7 +263,7 @@ if __name__ == '__main__':
         openai_consumer_2 = AsyncConsumerFactory.with_consume_fn(openai_consume_fn_2, openai_handler_2)
 
         stop_event = asyncio.Event()
-        callback = PipelineCallBackWithEvent(stop_event=stop_event)
+        callback = PipelineCallback.with_events(stop_event=stop_event)
         pipeline_bridge = AsyncBridgeConsumer(stop_event=stop_event)
         pipeline = AsyncPipeline(openai_producer, [openai_consumer, pipeline_bridge], callback=callback)
         pipeline2 = AsyncPipeline(pipeline_bridge.to_producer(), [openai_consumer_2])
