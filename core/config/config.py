@@ -1,0 +1,1 @@
+DATABASE_PATH = "data/file-rag-chroma_db"
