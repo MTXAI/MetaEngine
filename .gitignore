@@ -4,6 +4,8 @@ bak/
 .idea
 .vscode
 .DS_Store
+*.bin
+*.sqlite*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

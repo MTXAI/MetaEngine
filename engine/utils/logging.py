@@ -96,12 +96,13 @@ def _cached_log_stream(filename):
     return open(filename, "a")
 
 
-from pathlib import Path
+def init_logging():
+    from engine.config import APP_LOG_FILE
+
+    setup_logger_dist(str(APP_LOG_FILE), 0, name='MetaEngine')
 
 
-log_path = Path(__file__).parent / ".." / ".." / ".workspace" / "logs"
-log_path.mkdir(parents=True, exist_ok=True)
-setup_logger_dist(str(log_path / "log.txt"), 0, name='MetaEngine')
+init_logging()
 
 
 if __name__ == '__main__':
