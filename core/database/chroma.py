@@ -7,9 +7,22 @@ from langchain_community.vectorstores.utils import filter_complex_metadata
 from transformers import AutoTokenizer
 
 from core.config.config import DATABASE_PATH
-from core.file_rag.file_loader import is_supported_file, load_file
+from engine.agent.file_rag.file_loader import is_supported_file, load_file
 from core.utils.log import logger
 
+def load_db():
+    """
+    Load the ChromaDB vector store from the specified database path.
+    If the database does not exist, it will return None.
+    """
+    if os.path.exists(DATABASE_PATH):
+        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        logger.info(f"Loading database from {DATABASE_PATH}")
+        vector_store = Chroma(embedding_function=embeddings, persist_directory=DATABASE_PATH)
+        return vector_store
+    else:
+        logger.warning(f"Database {DATABASE_PATH} does not exist.")
+        return None
 
 def create_db(dir : str):
     # load file in dir
@@ -51,6 +64,8 @@ def create_db(dir : str):
     # embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
     vector_store = Chroma.from_documents(documents=docs_processed, ids=ids, embedding=embeddings, persist_directory=DATABASE_PATH)
+
+    return vector_store
 
 def clean_db():
     if os.path.exists(DATABASE_PATH):

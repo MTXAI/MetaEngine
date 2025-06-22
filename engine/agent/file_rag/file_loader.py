@@ -3,7 +3,7 @@ from typing import List
 from langchain_community.document_loaders import UnstructuredFileLoader
 from langchain_core.documents import Document
 
-from core.file_rag.chinese_text_splitter import ChineseTextSplitter
+from engine.agent.file_rag.chinese_text_splitter import ChineseTextSplitter
 
 
 def load_file(filepath) -> List[Document]:
