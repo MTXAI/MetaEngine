@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Tuple, Optional, Union
 
 
 class PipelineCallback:
@@ -125,18 +125,22 @@ class AsyncPipeline:
     def __init__(
             self,
             producer: Callable,
-            consumers: List[AsyncConsumer],
+            consumers: Union[List[AsyncConsumer], Tuple[AsyncConsumer], AsyncConsumer]=None,
             callback: PipelineCallback=None,
             timeout: float=0.1,
         ):
         self.producer = producer
+        if consumers is None:
+            consumers = []
+        if isinstance(consumers, AsyncConsumer):
+            consumers = [consumers]
         self.consumers: List[AsyncConsumer] = consumers
         self.callback = callback if callback is not None else PipelineCallback()
 
         self.queues = []
-        for i in range(len(consumers)):
+        for i in range(len(self.consumers)):
             self.queues.append(asyncio.Queue())
-        self.input_queue = self.queues[0]
+        self.input_queue = self.queues[0] if len(self.queues) > 0 else None
         self.error_event = asyncio.Event()
         self.done_event = asyncio.Event()
 
@@ -147,6 +151,12 @@ class AsyncPipeline:
 
         ## kwargs
         self.timeout = timeout
+
+    def add_consumer(self, consumer: AsyncConsumer):
+        self.consumers.append(consumer)
+        self.queues.append(asyncio.Queue())
+        if len(self.queues) == 1:
+            self.input_queue = self.queues[0]
 
     async def __daemon(self):
         if self.error_event is None:
@@ -189,6 +199,7 @@ class AsyncPipeline:
                 self.callback.on_error(e)
 
     async def start(self) -> None:
+        assert len(self.consumers) > 0
         if not self.running:
             self.running = True
             self.daemon_task = asyncio.ensure_future(self.__daemon())
@@ -265,8 +276,13 @@ if __name__ == '__main__':
         stop_event = asyncio.Event()
         callback = PipelineCallback.with_events(stop_event=stop_event)
         pipeline_bridge = AsyncBridgeConsumer(stop_event=stop_event)
-        pipeline = AsyncPipeline(openai_producer, [openai_consumer, pipeline_bridge], callback=callback)
-        pipeline2 = AsyncPipeline(pipeline_bridge.to_producer(), [openai_consumer_2])
+        pipeline = AsyncPipeline(
+            openai_producer,
+            [openai_consumer],
+            callback=callback)
+        pipeline.add_consumer(pipeline_bridge)
+        pipeline2 = AsyncPipeline(pipeline_bridge.to_producer())
+        pipeline2.add_consumer(openai_consumer_2)
 
 
         tasks = [

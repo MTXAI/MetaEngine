@@ -8,7 +8,7 @@ from smolagents import OpenAIServerModel
 
 from engine.agent.agents.smol.agents import QaAgent
 from engine.agent.model.history import History
-from engine.agent.store.chroma import clean_db, create_db
+from engine.agent.vecdb.chroma import clean_db, create_db
 from engine.agent.tools.rag import RetrieverTool
 from engine.config import *
 
@@ -20,8 +20,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    clean_db(DATABASE_PATH)
-    retriever_tool = RetrieverTool(create_db(DATABASE_PATH, args.docs))
+    vecdb_path = DEFAULT_PROJECT_CONFIG.vecdb_path
+    clean_db(vecdb_path)
+    retriever_tool = RetrieverTool(create_db(vecdb_path, args.docs))
     # retriever_tool = RetrieverTool(load_db())
     print(ONE_API_LLM_MODEL.api_base_url)
     # For anthropic: change model_id below to 'anthropic/claude-3-5-sonnet-20240620' and also change 'os.environ.get("ANTHROPIC_API_KEY")'  # You can change this to your preferred VLM model
