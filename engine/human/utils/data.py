@@ -25,13 +25,14 @@ class TextData(Data):
         }
 
 
-class AudioData(Data):
+class SoundData(Data):
     def __init__(self, speech: ndarray, stream: bool=False, final: bool=True):
         self.data = {
             "speech": speech,
             "is_stream": stream,
             "is_final": final,
         }
+
 
 class VideoData(Data):
     pass

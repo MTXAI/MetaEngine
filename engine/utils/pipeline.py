@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Any, Callable, List, Tuple, Optional, Union
 
 
@@ -120,22 +121,30 @@ class AsyncConsumerFactory:
 
 class AsyncPipeline:
     """
-    任何错误都可能会导致阻塞, 且不可恢复, 因此不适合长时间运行
+    任何错误都会终止任务, 且不可恢复, 不适合长时间运行, 需要避免单个 pipeline 过长, 或分叉太多
     """
     def __init__(
             self,
-            producer: Callable,
+            producer: Callable=None,
             consumers: Union[List[AsyncConsumer], Tuple[AsyncConsumer], AsyncConsumer]=None,
-            callback: PipelineCallback=None,
+            callbacks: Union[List[PipelineCallback], Tuple[PipelineCallback], PipelineCallback]=None,
             timeout: float=0.1,
+            **kwargs
         ):
+        self.name = kwargs.get("name", "Unknown")
         self.producer = producer
+
         if consumers is None:
             consumers = []
-        if isinstance(consumers, AsyncConsumer):
+        if not hasattr(consumers, "__len__"):
             consumers = [consumers]
-        self.consumers: List[AsyncConsumer] = consumers
-        self.callback = callback if callback is not None else PipelineCallback()
+        self.consumers: List[AsyncConsumer] = list(consumers)
+
+        if callbacks is None:
+            callbacks = []
+        if not hasattr(callbacks, "__len__"):
+            callbacks = [callbacks]
+        self.callbacks: List[PipelineCallback] = list(callbacks)
 
         self.queues = []
         for i in range(len(self.consumers)):
@@ -152,11 +161,17 @@ class AsyncPipeline:
         ## kwargs
         self.timeout = timeout
 
+    def set_producer(self, producer):
+        self.producer = producer
+
     def add_consumer(self, consumer: AsyncConsumer):
         self.consumers.append(consumer)
         self.queues.append(asyncio.Queue())
         if len(self.queues) == 1:
             self.input_queue = self.queues[0]
+
+    def add_callback(self, callback: PipelineCallback):
+        self.callbacks.append(callback)
 
     async def __daemon(self):
         if self.error_event is None:
@@ -165,7 +180,7 @@ class AsyncPipeline:
             try:
                 if self.error_event.is_set():
                     self.done_event.set()
-                    print(f'detect a error, quit...')
+                    logging.error(f'pipeline [{self.name}] quit...')
             finally:
                 await asyncio.sleep(0.1)
 
@@ -175,8 +190,10 @@ class AsyncPipeline:
                 if self.running:
                     await self.input_queue.put(data)
         except Exception as e:
+            logging.error(f'pipeline [{self.name}] detect a error [{e}]')
             self.error_event.set()
-            self.callback.on_error(e)
+            for c in self.callbacks:
+                c.on_error(e)
         finally:
             self.done_event.set()
 
@@ -195,10 +212,13 @@ class AsyncPipeline:
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
+                logging.error(f'pipeline [{self.name}] detect a error [{e}]')
                 self.error_event.set()
-                self.callback.on_error(e)
+                for c in self.callbacks:
+                    c.on_error(e)
 
     async def start(self) -> None:
+        assert self.producer is not None
         assert len(self.consumers) > 0
         if not self.running:
             self.running = True
@@ -206,7 +226,8 @@ class AsyncPipeline:
             self.producer_task = asyncio.ensure_future(self.__produce_worker())
             for i, h in enumerate(self.consumers):
                 self.consumer_tasks.append(asyncio.create_task(self.__consume_worker(i)))
-            self.callback.on_start()
+            for c in self.callbacks:
+                c.on_start()
 
     async def stop(self) -> None:
         if self.running:
@@ -224,20 +245,62 @@ class AsyncPipeline:
                 if task and not task.done():
                     task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
-            self.callback.on_stop()
+            for c in self.callbacks:
+                c.on_stop()
+
+
+class AsyncPipelineRunner:
+    pipelines: List[AsyncPipeline]
+    def __init__(self):
+        self.pipelines = []
+        self.stop_event = asyncio.Event()
+
+    def add_pipeline(self, pipeline: AsyncPipeline):
+        """
+        Concat multiple pipelines with bridges
+        """
+        if len(self.pipelines) == 0:
+            assert pipeline.producer is not None
+            self.pipelines.append(pipeline)
+        else:
+            # new bridge and callback
+            pipeline_bridge = AsyncBridgeConsumer(stop_event=self.stop_event)
+            callback = PipelineCallback.with_events(stop_event=self.stop_event)
+
+            # add consumer and callback
+            self.pipelines[-1].add_consumer(pipeline_bridge)
+            self.pipelines[-1].add_callback(callback)
+
+            # set producer
+            if pipeline.producer is not None:
+                logging.warning(f"pipeline already has a producer, will be replaced by bridge")
+            pipeline.set_producer(pipeline_bridge.to_producer())
+            self.pipelines.append(pipeline)
+
+    async def submit(self):
+        tasks = []
+        for p in self.pipelines:
+            tasks.append(p.start())
+        for p in self.pipelines:
+            tasks.append(p.stop())
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    def run(self):
+        asyncio.run(self.submit())
 
 
 if __name__ == '__main__':
+    from openai import AsyncOpenAI
 
-    async def main():
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(
-            # one api 生成的令牌
-            api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
-            base_url="http://localhost:3000/v1"
-        )
+    client = AsyncOpenAI(
+        # one api 生成的令牌
+        api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
+        base_url="http://localhost:3000/v1"
+    )
 
-        async def openai_producer():
+
+    def openai_producer():
+        async def produce_fn():
             chat_completion = await client.chat.completions.create(
                 # model="doubao-1.5-lite-32k",
                 model="qwen-turbo",
@@ -252,46 +315,92 @@ if __name__ == '__main__':
             async for chunk in chat_completion:
                 content = chunk.choices[0].delta.content
                 yield content
+        return produce_fn
 
-        def openai_handler(content):
-            # if len(content) > 2:
-            #     raise Exception("<UNK>")
-            return content
 
-        def openai_handler_2(content):
-            return content
+    def openai_handler(content):
+        return content
 
-        async def openai_consume_fn(data, processed_data=None):
-            print(1, len(data), data)
+
+    def openai_consumer():
+        handler = openai_handler
+        async def consume_fn(data, processed_data=None):
+            print(len(data), data)
             return data
+        return AsyncConsumerFactory.with_consume_fn(consume_fn, handler)
 
-        openai_consumer = AsyncConsumerFactory.with_consume_fn(openai_consume_fn, openai_handler)
 
-        async def openai_consume_fn_2(data, processed_data=None):
-            print(2, len(data), data)
+    import dashscope
+    import pyaudio
+    from dashscope.audio.tts_v2 import *
+
+    class _Callback(ResultCallback):
+        _player = None
+        _stream = None
+
+        def on_open(self):
+            # print("websocket is open.")
+            self._player = pyaudio.PyAudio()
+            self._stream = self._player.open(
+                format=pyaudio.paInt16, channels=1, rate=22050, output=True
+            )
+
+        def on_complete(self):
+            logging.info("speech synthesis task complete successfully.")
+
+        def on_error(self, message: str):
+            logging.info(f"speech synthesis task failed, {message}")
+
+        def on_close(self):
+            logging.info("websocket is closed.")
+            # stop player
+            self._stream.stop_stream()
+            self._stream.close()
+            self._player.terminate()
+
+        def on_event(self, message):
+            logging.info(f"recv speech synthsis message {message}")
+            pass
+
+        def on_data(self, data: bytes) -> None:
+            logging.info("audio result length:", len(data))
+            self._stream.write(data)
+
+    dashscope.api_key = "sk-361f246a74c9421085d1d137038d5064"
+    model = "cosyvoice-v1"
+    voice = "longxiaochun"
+    callback = _Callback()
+    synthesizer = SpeechSynthesizer(
+        model=model,
+        voice=voice,
+        format=AudioFormat.PCM_22050HZ_MONO_16BIT,
+        callback=callback,
+    )
+
+    def openai_consumer_2():
+        handler = None
+        async def consume_fn(data, processed_data=None):
+            synthesizer.streaming_call(data)
             return data
+        return AsyncConsumerFactory.with_consume_fn(consume_fn, handler)
 
-        openai_consumer_2 = AsyncConsumerFactory.with_consume_fn(openai_consume_fn_2, openai_handler_2)
+    class TTSCallback(PipelineCallback):
+        def on_stop(self):
+            synthesizer.streaming_complete()
 
-        stop_event = asyncio.Event()
-        callback = PipelineCallback.with_events(stop_event=stop_event)
-        pipeline_bridge = AsyncBridgeConsumer(stop_event=stop_event)
-        pipeline = AsyncPipeline(
-            openai_producer,
-            [openai_consumer],
-            callback=callback)
-        pipeline.add_consumer(pipeline_bridge)
-        pipeline2 = AsyncPipeline(pipeline_bridge.to_producer())
-        pipeline2.add_consumer(openai_consumer_2)
+    runner = AsyncPipelineRunner()
 
+    pipeline = AsyncPipeline(
+        openai_producer(),
+        # consumers=openai_consumer(),
+    )
+    runner.add_pipeline(pipeline)
 
-        tasks = [
-            pipeline.start(),
-            pipeline2.start(),
-            pipeline.stop(),
-            pipeline2.stop(),
-        ]
-        await asyncio.gather(*tasks, return_exceptions=True)
+    pipeline2 = AsyncPipeline(
+        consumers=openai_consumer_2(),
+        callbacks=TTSCallback(),
+    )
+    runner.add_pipeline(pipeline2)
 
-    asyncio.run(main())
+    runner.run()
 
