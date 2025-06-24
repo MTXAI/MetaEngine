@@ -8,7 +8,7 @@ import pyaudio
 from dashscope.audio.tts_v2 import *
 from funasr import AutoModel
 
-from engine.utils.async_utils import AsyncPipeline, AsyncBridgeConsumer, PipelineCallback, \
+from engine.utils.pipeline import AsyncPipeline, AsyncBridgeConsumer, PipelineCallback, \
     AsyncConsumerFactory
 
 # 若没有将API Key配置到环境变量中，需将下面这行代码注释放开，并将apiKey替换为自己的API Key
@@ -155,7 +155,6 @@ def consume_fn_3(content):
 
 class TTSCallback(PipelineCallback):
     def on_stop(self):
-        super().on_stop()
         synthesizer.streaming_complete()
 
 async def run_pipeline():

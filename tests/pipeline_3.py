@@ -5,7 +5,7 @@ from pathlib import Path
 
 from funasr import AutoModel
 
-from engine.utils.async_utils import AsyncPipeline, AsyncConsumerFactory
+from engine.utils.pipeline import AsyncPipeline, AsyncConsumerFactory
 
 # chunk_size = [0, 10, 5] #[0, 10, 5] 600ms, [0, 8, 4] 480ms
 chunk_size = [0, 100, 50]

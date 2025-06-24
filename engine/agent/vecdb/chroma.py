@@ -56,7 +56,7 @@ def create_db(db_path: os.PathLike, doc_dir : str):
                     ids.append(str(len(docs_processed)))
                 docs_processed.append(new_doc)
 
-    print("Embedding documents... This should take a few minutes (5 minutes on MacBook with M1 Pro)")
+    logging.info("Embedding documents... This should take a few minutes (5 minutes on MacBook with M1 Pro)")
     # Initialize embeddings and ChromaDB vector store
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
