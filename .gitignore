@@ -6,6 +6,11 @@ bak/
 .DS_Store
 *.bin
 *.sqlite*
+checkpoints/
+*.mp3
+*.mp4
+*.wav
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

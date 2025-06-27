@@ -18,7 +18,7 @@ def soundfile_producer(f: PathLike, chunk_size: Tuple):
             speech_chunk = speech[i * chunk_stride:(i + 1) * chunk_stride]
             is_final = i == total_chunk_num - 1
             yield SoundData(
-                speech=speech_chunk,
+                sound=speech_chunk,
                 stream=True,
                 final=is_final,
             )

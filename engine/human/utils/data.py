@@ -26,9 +26,9 @@ class TextData(Data):
 
 
 class SoundData(Data):
-    def __init__(self, speech: ndarray, stream: bool=False, final: bool=True):
+    def __init__(self, sound: ndarray, stream: bool=False, final: bool=True):
         self.data = {
-            "speech": speech,
+            "sound": sound,
             "is_stream": stream,
             "is_final": final,
         }
