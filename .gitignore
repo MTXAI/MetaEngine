@@ -7,6 +7,7 @@ bak/
 *.bin
 *.sqlite*
 checkpoints/
+avatars/
 *.mp3
 *.mp4
 *.wav
