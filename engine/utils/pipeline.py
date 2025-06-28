@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 from typing import Any, Callable, List, Tuple, Optional, Union
 
 
@@ -191,6 +192,7 @@ class AsyncPipeline:
                     await self.input_queue.put(data)
         except Exception as e:
             logging.error(f'pipeline [{self.name}] detect a error [{e}]')
+            traceback.print_exc()
             self.error_event.set()
             for c in self.callbacks:
                 c.on_error(e)
@@ -213,6 +215,7 @@ class AsyncPipeline:
                 continue
             except Exception as e:
                 logging.error(f'pipeline [{self.name}] detect a error [{e}]')
+                traceback.print_exc()
                 self.error_event.set()
                 for c in self.callbacks:
                     c.on_error(e)

@@ -12,7 +12,7 @@ from typing import AsyncGenerator, Tuple
 import soundfile
 
 from engine.agent.agents.smol.agents import QaAgent
-from engine.human.utils.data import TextData, SoundData
+from engine.human.utils.data import Data
 from engine.utils.pipeline import AsyncConsumer, AsyncConsumerFactory, PipelineCallback
 
 
@@ -26,7 +26,7 @@ from engine.utils.pipeline import AsyncConsumer, AsyncConsumerFactory, PipelineC
 
 ## Consumer
 def svc_consumer() -> AsyncConsumer:
-    def consume_fn(data: SoundData, processed_data: SoundData=None):
+    def consume_fn(data: Data, processed_data: Data=None):
         pass
 
     handler = None
@@ -34,7 +34,7 @@ def svc_consumer() -> AsyncConsumer:
 
 
 def async_svc_consumer() -> AsyncConsumer:
-    async def consume_fn(data: SoundData, processed_data: SoundData=None):
+    async def consume_fn(data: Data, processed_data: Data=None):
         pass
 
     handler = None

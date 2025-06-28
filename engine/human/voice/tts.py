@@ -12,13 +12,13 @@ from typing import AsyncGenerator, Tuple
 import soundfile
 
 from engine.agent.agents.smol.agents import QaAgent
-from engine.human.utils.data import TextData
+from engine.human.utils.data import Data
 from engine.utils.pipeline import AsyncConsumer, AsyncConsumerFactory, PipelineCallback
 
 
 ## Producer
 def completion_producer(agent_client: QaAgent, prompt: str):
-    async def produce_fn() -> AsyncGenerator[TextData]:
+    async def produce_fn() -> AsyncGenerator:
         pass
         # chat_completion = await agent_client.chat.completions.create(
         #     # model="doubao-1.5-lite-32k",
@@ -41,7 +41,7 @@ def completion_producer(agent_client: QaAgent, prompt: str):
 
 
 ## Handler
-def text_fileter_handler(data: TextData):
+def text_fileter_handler(data: Data):
     return data
 
 
@@ -49,14 +49,14 @@ def text_fileter_handler(data: TextData):
 def tts_consumer() -> AsyncConsumer:
     handler = None
 
-    def consume_fn(data: TextData, processed_data: TextData=None):
+    def consume_fn(data: Data, processed_data: Data=None):
         return data
 
     return AsyncConsumerFactory.with_consume_fn(consume_fn, handler=handler)
 
 
 def async_tts_consumer() -> AsyncConsumer:
-    async def consume_fn(data: TextData, processed_data: TextData=None):
+    async def consume_fn(data: Data, processed_data: Data=None):
         pass
 
     handler = None
