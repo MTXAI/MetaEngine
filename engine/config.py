@@ -59,12 +59,19 @@ _device, start_method = get_device_and_start_method()
 class RuntimeConfig(EasyConfig):
     device: str
     start_method: str
+    max_workers: int
+    max_queue_size: int
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.device = _device
         self.start_method = start_method
 
-DEFAULT_RUNTIME_CONFIG = RuntimeConfig()
+DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
+    dict(
+        max_workers=4,
+        max_queue_size=12,
+    )
+)
 
 
 class PlayerConfig(EasyConfig):
@@ -89,3 +96,4 @@ WAV2LIP_PLAYER_CONFIG = PlayerConfig(
         frame_interval=1 / float(50) / 4,
     )
 )
+

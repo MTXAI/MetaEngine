@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import queue
 import threading
@@ -27,7 +28,10 @@ class Player:
             config: PlayerConfig,
             model: ModelWrapper,
             avatar: Tuple,
-            thread_pool: ThreadPool
+            thread_pool: ThreadPool,
+            event_loop: asyncio.AbstractEventLoop,
+            # video_track: ,
+            # audio_track: ,
     ):
         print(config)
         self.config = config
@@ -50,6 +54,7 @@ class Player:
         self.frame_count = len(self.frame_list_cycle)
         self.frame_index = 0
         self.thread_pool = thread_pool
+        self.event_loop = event_loop
         self.monitor_thread = None
         self.monitor_running = False
         self.debug = False
@@ -211,7 +216,7 @@ class Player:
                 image = new_frame
                 image[0, :] &= 0xFE  # 确保第一行是偶数，避免某些视频问题
                 new_frame = VideoFrame.from_ndarray(image, format="bgr24")
-                # print(new_frame)
+                # asyncio.run_coroutine_threadsafe(self.video_track.put_frame(new_frame), self.event_loop)
 
                 # 处理音频帧
                 for frame_data in audio_frame:
@@ -221,6 +226,7 @@ class Player:
                     new_audio_frame.planes[0].update(frame.tobytes())
                     new_audio_frame.sample_rate = self.sample_rate
                     # print(new_audio_frame)
+                    # asyncio.run_coroutine_threadsafe(self.audio_track.put_frame(new_frame), self.event_loop)
 
                 # # 每处理一帧后打印队列状态
                 # self._print_queue_status("After processing output frame")
@@ -294,17 +300,16 @@ class Player:
 if __name__ == '__main__':
     from engine.config import WAV2LIP_PLAYER_CONFIG
     from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
-    from engine.utils.pool import ThreadPool
+    from engine.runtime import thread_pool
     import time
 
     f = '../../../avatars/wav2lip256_avatar1'
     s_f = '../../../tests/test_datas/asr.wav'
     c_f = '../../../checkpoints/wav2lip.pth'
     model = Wav2LipWrapper(c_f)
-    pool = ThreadPool(max_workers=4, max_queue_size=10)
 
     # 创建Player实例并启动
-    player = Player(WAV2LIP_PLAYER_CONFIG, model, load_avatar(f), pool)
+    player = Player(WAV2LIP_PLAYER_CONFIG, model, load_avatar(f), thread_pool, asyncio.get_event_loop())
     player.start()
 
     # 设置音频数据生产者
@@ -320,11 +325,11 @@ if __name__ == '__main__':
         consumer=consume_fn,
     )
 
-    producer_task = pool.submit(
+    producer_task = thread_pool.submit(
         pipeline.produce_worker,
         task_info=TaskInfo(name="Task producer")
     )
-    consumer_task = pool.submit(
+    consumer_task = thread_pool.submit(
         pipeline.consume_worker,
         task_info=TaskInfo(name="Task consumer")
     )
@@ -337,5 +342,5 @@ if __name__ == '__main__':
             break
     # pipeline.shutdown()
     # player.shutdown()
-    pool.shutdown()
+    thread_pool.shutdown()
 
