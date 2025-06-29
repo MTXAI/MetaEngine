@@ -1,11 +1,12 @@
 from __future__ import print_function
+
+import math
 import os
 import sys
-import time
-import torch
-import math
-import numpy as np
+
 import cv2
+import numpy as np
+import torch
 
 
 def _gaussian(

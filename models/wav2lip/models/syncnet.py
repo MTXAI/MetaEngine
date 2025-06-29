@@ -1,8 +1,8 @@
-import torch
 from torch import nn
 from torch.nn import functional as F
-import pdb
+
 from .conv import Conv2d
+
 
 class SyncNet_color(nn.Module):
     def __init__(self):

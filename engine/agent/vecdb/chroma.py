@@ -3,11 +3,12 @@ import os
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores.utils import filter_complex_metadata
+from langchain_huggingface import HuggingFaceEmbeddings
 from transformers import AutoTokenizer
 
 from engine.agent.file_rag.file_loader import is_supported_file, load_file
+
 
 def load_db(db_path: os.PathLike):
     """

@@ -2,28 +2,31 @@ import glob
 import logging
 import os
 import pickle
+from typing import List
 
 import cv2
+import numpy as np
 import torch
 from tqdm import tqdm
 
+from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
+from engine.human.avatar.avatar import ModelWrapper
+from engine.human.utils.data import Data
+from models.wav2lip.audio import melspectrogram
 from models.wav2lip.models import Wav2Lip
-
-
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 def load_model(path):
     model = Wav2Lip()
     logging.info("Load checkpoint from: {}".format(path))
-    checkpoint = torch.load(path, map_location='cpu')
+    checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
     s = checkpoint["state_dict"]
     new_s = {}
     for k, v in s.items():
         new_s[k.replace('module.', '')] = v
     model.load_state_dict(new_s)
 
-    model = model.to(device)
+    model = model.to(DEFAULT_RUNTIME_CONFIG.device)
     return model.eval()
 
 def load_avatar(avatar_path):
@@ -55,3 +58,36 @@ def read_imgs(img_list):
         frame = cv2.imread(img_path)
         frames.append(frame)
     return frames
+
+class Wav2LipWrapper(ModelWrapper):
+    def __init__(self, path):
+        super().__init__()
+        self.model = load_model(path)
+
+    def encode_audio_feature(self, frame_batch: List[np.array], config: PlayerConfig):
+        frames = np.concatenate(frame_batch)
+        mel = melspectrogram(frames)
+
+        batch_size = config.batch_size
+        mel_step_size = batch_size
+        i = 0
+        audio_feature_batch = []
+        while i < batch_size:
+            start_idx = config.window_left
+            if start_idx + mel_step_size > len(mel[0]):
+                audio_feature_batch.append(mel[:, len(mel[0]) - mel_step_size:])
+            else:
+                audio_feature_batch.append(mel[:, start_idx: start_idx + mel_step_size])
+            i += 1
+        return audio_feature_batch
+
+    def inference(self, audio_feature_batch: torch.Tensor, face_img_batch: torch.Tensor, config: PlayerConfig):
+        face_img_masked = face_img_batch.clone()
+        face_img_masked[:, face_img_batch[0].shape[0] // 2:] = 0
+        face_img_batch = torch.cat((face_img_masked, face_img_batch), dim=3) / 255.
+        if len(audio_feature_batch.shape) < 4:
+            audio_feature_batch = audio_feature_batch.unsqueeze(-1)
+        audio_feature_batch = audio_feature_batch.permute(0, 3, 1, 2)
+        face_img_batch = face_img_batch.permute(0, 3, 1, 2)
+        pred_img_batch = self.model(audio_feature_batch, face_img_batch)
+        return pred_img_batch

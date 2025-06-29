@@ -1,7 +1,13 @@
 import asyncio
-import logging
-import traceback
-from typing import Any, Callable, List, Tuple, Optional, Union
+import queue
+import threading
+from queue import Queue
+from typing import Callable, Tuple, Union
+
+import trio
+
+from engine.human.utils.data import Data
+from engine.utils.pool import TaskCallback, ThreadPool, TaskInfo
 
 
 class PipelineCallback:
@@ -14,396 +20,262 @@ class PipelineCallback:
     def on_stop(self):
         pass
 
-    @staticmethod
-    def with_events(
-        start_event: asyncio.Event = None,
-        error_event: asyncio.Event = None,
-        stop_event: asyncio.Event = None,
-    ):
-        class _PipelineCallBackWithEvent(PipelineCallback):
-            def __init__(
-                    self,
-                    start_event: asyncio.Event = None,
-                    error_event: asyncio.Event = None,
-                    stop_event: asyncio.Event = None,
-            ):
-                super().__init__()
-                self.start_event = start_event
-                self.error_event = error_event
-                self.stop_event = stop_event
 
-            def on_start(self):
-                if self.start_event:
-                    self.start_event.set()
-
-            def on_error(self, e: Exception):
-                if self.error_event:
-                    self.error_event.set()
-
-            def on_stop(self):
-                if self.stop_event:
-                    self.stop_event.set()
-
-        return _PipelineCallBackWithEvent(
-            start_event=start_event,
-            error_event=error_event,
-            stop_event=stop_event,
-        )
-
-
-class AsyncConsumer:
-    def __init__(self, handler: Callable=None):
-        self.handler = handler
-
-    def has_handler(self):
-        return self.handler is not None
-
-    async def consume(self, data: Any, processed_data: Any=None, **kwargs) -> Any:
-        """
-        async consume data maybe processed
-        """
-        pass
-
-    def on_consume(self, data: Any, **kwargs) -> Any:
-        """
-        process data before consume
-        """
-        if self.has_handler():
-            return self.handler(data, **kwargs)
-        return data
-
-
-class AsyncBridgeConsumer(AsyncConsumer):
-    """
-    wrap consumer as producer
-    """
-    def __init__(self, stop_event, generator=None, timeout: float=0.1):
-        super().__init__()
-        self.stop_event = stop_event
-        self.generator = generator
-        self.queue = asyncio.Queue()
-        self.timeout = timeout
-
-    async def consume(self, data: Any, processed_data: Any=None, **kwargs) -> Any:
-        await self.queue.put(data)
-        return data
-
-    def to_producer(self):
-        async def producer():
-            while not self.stop_event.is_set() or not self.queue.empty():
-                try:
-                    data = await asyncio.wait_for(self.queue.get(), timeout=self.timeout)
-                    if self.generator is not None:
-                        async for _data in self.generator(data):
-                            yield _data
-                    else:
-                        yield data
-                except asyncio.TimeoutError:
-                    continue
-        return producer
-
-
-class AsyncConsumerFactory:
-    @staticmethod
-    def with_consume_fn(consume_fn, handler=None):
-        class _AsyncConsumer(AsyncConsumer):
-            def __init__(self):
-                super().__init__(handler=handler)
-
-            async def consume(self, data: Any, processed_data: Any = None, **kwargs) -> Any:
-                if asyncio.iscoroutinefunction(consume_fn):
-                    data = await consume_fn(data, processed_data, **kwargs)
-                else:
-                    data = consume_fn(data, **kwargs)
-                return data
-
-        return _AsyncConsumer()
-
-
-class AsyncPipeline:
-    """
-    任何错误都会终止任务, 且不可恢复, 不适合长时间运行, 需要避免单个 pipeline 过长, 或分叉太多
-    """
+class Pipeline:
     def __init__(
             self,
-            producer: Callable=None,
-            consumers: Union[List[AsyncConsumer], Tuple[AsyncConsumer], AsyncConsumer]=None,
-            callbacks: Union[List[PipelineCallback], Tuple[PipelineCallback], PipelineCallback]=None,
+            producer: Callable,
+            consumer: Callable,
+            generator: Callable=None,
             timeout: float=0.1,
             **kwargs
         ):
-        self.name = kwargs.get("name", "Unknown")
         self.producer = producer
-
-        if consumers is None:
-            consumers = []
-        if not hasattr(consumers, "__len__"):
-            consumers = [consumers]
-        self.consumers: List[AsyncConsumer] = list(consumers)
-
-        if callbacks is None:
-            callbacks = []
-        if not hasattr(callbacks, "__len__"):
-            callbacks = [callbacks]
-        self.callbacks: List[PipelineCallback] = list(callbacks)
-
-        self.queues = []
-        for i in range(len(self.consumers)):
-            self.queues.append(asyncio.Queue())
-        self.input_queue = self.queues[0] if len(self.queues) > 0 else None
-        self.error_event = asyncio.Event()
-        self.done_event = asyncio.Event()
-
-        self.running = False
-        self.daemon_task = None
-        self.producer_task = None
-        self.consumer_tasks = []
-
-        ## kwargs
+        self.consumer = consumer
+        self.generator = generator
+        self.out_queue = Queue()
+        self.queue = Queue()
         self.timeout = timeout
+        self._stop_event = threading.Event()
+        self._produce_event = threading.Event()
+        self._consume_event = threading.Event()
 
-    def set_producer(self, producer):
-        self.producer = producer
+    def produce_worker(self):
+        for data in self.producer():
+            if self._stop_event.is_set():
+                break
+            self.queue.put(data)
+        self._produce_event.set()
 
-    def add_consumer(self, consumer: AsyncConsumer):
-        self.consumers.append(consumer)
-        self.queues.append(asyncio.Queue())
-        if len(self.queues) == 1:
-            self.input_queue = self.queues[0]
-
-    def add_callback(self, callback: PipelineCallback):
-        self.callbacks.append(callback)
-
-    async def __daemon(self):
-        if self.error_event is None:
-            return
-        while self.running:
+    def consume_worker(self):
+        while not self._produce_event.is_set() or not self.queue.empty():
             try:
-                if self.error_event.is_set():
-                    self.done_event.set()
-                    logging.error(f'pipeline [{self.name}] quit...')
-            finally:
-                await asyncio.sleep(0.1)
-
-    async def __produce_worker(self) -> None:
-        try:
-           async for data in self.producer():
-                if self.running:
-                    await self.input_queue.put(data)
-        except Exception as e:
-            logging.error(f'pipeline [{self.name}] detect a error [{e}]')
-            traceback.print_exc()
-            self.error_event.set()
-            for c in self.callbacks:
-                c.on_error(e)
-        finally:
-            self.done_event.set()
-
-    async def __consume_worker(self, idx) -> None:
-        while self.running:
-            try:
-                data = await asyncio.wait_for(self.queues[idx].get(), timeout=self.timeout)
-                if self.consumers[idx].has_handler():
-                    processed_data = self.consumers[idx].on_consume(data)
-                    new_data = await self.consumers[idx].consume(data, processed_data)
-                else:
-                    new_data = await self.consumers[idx].consume(data)
-                self.queues[idx].task_done()
-                if idx < len(self.consumers)-1:
-                    await self.queues[idx+1].put(new_data)
-            except asyncio.TimeoutError:
+                data = self.queue.get(timeout=self.timeout)
+            except queue.Empty:
                 continue
-            except Exception as e:
-                logging.error(f'pipeline [{self.name}] detect a error [{e}]')
-                traceback.print_exc()
-                self.error_event.set()
-                for c in self.callbacks:
-                    c.on_error(e)
+            data = self.consumer(data)
+            self.out_queue.put(data)
+        self._consume_event.set()
 
-    async def start(self) -> None:
-        assert self.producer is not None
-        assert len(self.consumers) > 0
-        if not self.running:
-            self.running = True
-            self.daemon_task = asyncio.ensure_future(self.__daemon())
-            self.producer_task = asyncio.ensure_future(self.__produce_worker())
-            for i, h in enumerate(self.consumers):
-                self.consumer_tasks.append(asyncio.create_task(self.__consume_worker(i)))
-            for c in self.callbacks:
-                c.on_start()
+    def wait_for_results(self):
+        while not self._consume_event.is_set() or not self.out_queue.empty():
+            try:
+                data = self.out_queue.get(timeout=self.timeout)
+                if self.generator is not None:
+                    for _data in self.generator(data):
+                        yield _data
+                else:
+                    yield data
+            except queue.Empty:
+                continue
 
-    async def stop(self) -> None:
-        if self.running:
-            if not self.done_event.is_set():
-                await self.done_event.wait()
-
-            if not self.error_event or not self.error_event.is_set():
-                for q in self.queues:
-                    await q.join()
-
-            self.running = False
-            tasks = [self.daemon_task, self.producer_task]
-            tasks.extend(self.consumer_tasks)
-            for task in tasks:
-                if task and not task.done():
-                    task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            for c in self.callbacks:
-                c.on_stop()
+    def shutdown(self):
+        self._stop_event.set()
 
 
-class AsyncPipelineRunner:
-    pipelines: List[AsyncPipeline]
-    def __init__(self):
-        self.pipelines = []
-        self.stop_event = asyncio.Event()
 
-    def add_pipeline(self, pipeline: AsyncPipeline):
-        """
-        Concat multiple pipelines with bridges
-        """
-        if len(self.pipelines) == 0:
-            assert pipeline.producer is not None
-            self.pipelines.append(pipeline)
-        else:
-            # new bridge and callback
-            pipeline_bridge = AsyncBridgeConsumer(stop_event=self.stop_event)
-            callback = PipelineCallback.with_events(stop_event=self.stop_event)
+class AsyncPipeline:
+    def __init__(
+            self,
+            producer: Callable,
+            consumer: Callable,
+            generator: Callable=None,
+            timeout: float=0.1,
+            channel_size: int = 100,
+            **kwargs
+        ):
+        self.producer = producer
+        self.consumer = consumer
+        self.generator = generator
+        self.sender, self.receiver = trio.open_memory_channel(channel_size)
+        self.output_sender, self.output_receiver = trio.open_memory_channel(channel_size)
+        self.timeout = timeout
+        self._stop_event = asyncio.Event()
 
-            # add consumer and callback
-            self.pipelines[-1].add_consumer(pipeline_bridge)
-            self.pipelines[-1].add_callback(callback)
+    async def produce_worker(self):
+        async for data in self.producer():
+            if self._stop_event.is_set():
+                break
+            await self.sender.send(data)
+        await self.sender.aclose()
 
-            # set producer
-            if pipeline.producer is not None:
-                logging.warning(f"pipeline already has a producer, will be replaced by bridge")
-            pipeline.set_producer(pipeline_bridge.to_producer())
-            self.pipelines.append(pipeline)
+    async def consume_worker(self):
+        async for data in self.receiver:
+            await self.output_sender.send(data)
+        await self.receiver.aclose()
+        await self.output_sender.aclose()
 
-    async def submit(self):
-        tasks = []
-        for p in self.pipelines:
-            tasks.append(p.start())
-        for p in self.pipelines:
-            tasks.append(p.stop())
-        await asyncio.gather(*tasks, return_exceptions=True)
+    async def wait_for_results(self):
+        async for data in self.output_receiver:
+            if self.generator is not None:
+                for _data in self.generator(data):
+                    yield _data
+            else:
+                yield data
+        await self.output_receiver.aclose()
 
-    def run(self):
-        asyncio.run(self.submit())
-
+    def shutdown(self):
+        self._stop_event.set()
 
 if __name__ == '__main__':
-    from openai import AsyncOpenAI
+    class SimpleCallback(TaskCallback):
+        def on_submit(self, future, task_info):
+            print(f"Task submitted: {future}, info: {task_info}")
 
-    client = AsyncOpenAI(
-        # one api 生成的令牌
-        api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
-        base_url="http://localhost:3000/v1"
-    )
+        def on_schedule(self, future, task_info):
+            print(f"Task scheduled: {future}, info: {task_info}")
 
+        def on_complete(self, future, task_info):
+            try:
+                result = future.result()
+                print(f"Task completed, Result: {result}, info: {task_info}")
+            except Exception as e:
+                print(f"Task completed, Error: {e}, info: {task_info}")
 
-    def openai_producer():
-        async def produce_fn():
-            chat_completion = await client.chat.completions.create(
-                # model="doubao-1.5-lite-32k",
-                model="qwen-turbo",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": "假设你正在带货一本英语单词书, 请简短准确且友好礼貌地回复弹幕问题: 怎么发货?, 只需回复问题, 无需问候",
-                    }
-                ],
-                stream=True,
+    def run_pipeline():
+
+        from os import PathLike
+        import soundfile
+
+        total_chunk_num = 0
+
+        def soundfile_producer(f: Union[PathLike, str], chunk_size_or_fps: Union[Tuple, int]):
+            speech, sample_rate = soundfile.read(f)
+            if isinstance(chunk_size_or_fps, int):
+                chunk_stride = int(sample_rate / chunk_size_or_fps)  # sample rate 16000, fps 50, 20ms
+            else:
+                chunk_stride = chunk_size_or_fps[1] * 32  # [0, 10, 5] is 20ms
+
+            def produce_fn():
+                global total_chunk_num
+                total_chunk_num = int(len((speech) - 1) / chunk_stride + 1)
+                for i in range(total_chunk_num):
+                    speech_chunk = speech[i * chunk_stride:(i + 1) * chunk_stride]
+                    is_final = i == total_chunk_num - 1
+                    yield Data(
+                        data=i,
+                        final=is_final,
+                    )
+
+            return produce_fn
+
+        s_f = '../../tests/test_datas/asr.wav'
+
+        with ThreadPool(max_workers=4, max_queue_size=5) as pool:
+            def consume_fn(data):
+                return data.data
+
+            pipe = Pipeline(
+                producer=soundfile_producer(s_f, 50),
+                consumer=consume_fn,
             )
-            async for chunk in chat_completion:
-                content = chunk.choices[0].delta.content
-                yield content
-        return produce_fn
+            try:
+                submitted_futures = []
+                future = pool.submit(
+                    pipe.produce_worker,
+                    task_info=TaskInfo(
+                        name="Task producer",
+                    ),
+                    callback=SimpleCallback(),
+                )
+                submitted_futures.append(future)
 
+                future = pool.submit(
+                    pipe.consume_worker,
+                    task_info=TaskInfo(
+                        name="Task consumer",
+                    ),
+                    callback=SimpleCallback(),
+                )
+                submitted_futures.append(future)
+            except Exception as e:
+                print(e)
 
-    def openai_handler(content):
-        return content
+            import time
+            def shutdown_fn():
+                time.sleep(3)
+                pipe.shutdown()
 
+            def read_data():
+                i = 0
+                for data in pipe.wait_for_results():
+                    print(f"Task read: {i} -- {data}")
+                    i += 1
 
-    def openai_consumer():
-        handler = openai_handler
-        async def consume_fn(data, processed_data=None):
-            print(len(data), data)
-            return data
-        return AsyncConsumerFactory.with_consume_fn(consume_fn, handler)
-
-
-    import dashscope
-    import pyaudio
-    from dashscope.audio.tts_v2 import *
-
-    class _Callback(ResultCallback):
-        _player = None
-        _stream = None
-
-        def on_open(self):
-            # print("websocket is open.")
-            self._player = pyaudio.PyAudio()
-            self._stream = self._player.open(
-                format=pyaudio.paInt16, channels=1, rate=22050, output=True
+            pool.submit(
+                read_data,
+                task_info=TaskInfo(
+                    name="read",
+                ),
+                callback=SimpleCallback(),
             )
 
-        def on_complete(self):
-            logging.info("speech synthesis task complete successfully.")
+            pool.submit(
+                shutdown_fn,
+                task_info=TaskInfo(
+                    name="shutdown",
+                ),
+                callback=SimpleCallback(),
+            )
 
-        def on_error(self, message: str):
-            logging.info(f"speech synthesis task failed, {message}")
+            pool.shutdown(wait=True)
 
-        def on_close(self):
-            logging.info("websocket is closed.")
-            # stop player
-            self._stream.stop_stream()
-            self._stream.close()
-            self._player.terminate()
+    async def run_async_pipeline():
 
-        def on_event(self, message):
-            logging.info(f"recv speech synthsis message {message}")
-            pass
+        import trio
+        from os import PathLike
+        import soundfile
 
-        def on_data(self, data: bytes) -> None:
-            logging.info("audio result length:", len(data))
-            self._stream.write(data)
+        total_chunk_num = 0
 
-    dashscope.api_key = "sk-361f246a74c9421085d1d137038d5064"
-    model = "cosyvoice-v1"
-    voice = "longxiaochun"
-    callback = _Callback()
-    synthesizer = SpeechSynthesizer(
-        model=model,
-        voice=voice,
-        format=AudioFormat.PCM_22050HZ_MONO_16BIT,
-        callback=callback,
-    )
+        def soundfile_producer(f: Union[PathLike, str], chunk_size_or_fps: Union[Tuple, int]):
+            speech, sample_rate = soundfile.read(f)
+            if isinstance(chunk_size_or_fps, int):
+                chunk_stride = int(sample_rate / chunk_size_or_fps)  # sample rate 16000, fps 50, 20ms
+            else:
+                chunk_stride = chunk_size_or_fps[1] * 32  # [0, 10, 5] is 20ms
 
-    def openai_consumer_2():
-        handler = None
-        async def consume_fn(data, processed_data=None):
-            synthesizer.streaming_call(data)
-            return data
-        return AsyncConsumerFactory.with_consume_fn(consume_fn, handler)
+            async def produce_fn():
+                global total_chunk_num
+                total_chunk_num = int(len((speech) - 1) / chunk_stride + 1)
+                for i in range(total_chunk_num):
+                    speech_chunk = speech[i * chunk_stride:(i + 1) * chunk_stride]
+                    is_final = i == total_chunk_num - 1
+                    yield Data(
+                        data=i,
+                        final=is_final,
+                    )
 
-    class TTSCallback(PipelineCallback):
-        def on_stop(self):
-            synthesizer.streaming_complete()
+            return produce_fn
 
-    runner = AsyncPipelineRunner()
+        s_f = '../../tests/test_datas/asr.wav'
 
-    pipeline = AsyncPipeline(
-        openai_producer(),
-        # consumers=openai_consumer(),
-    )
-    runner.add_pipeline(pipeline)
+        async def consume_fn(data):
+            return data.data
 
-    pipeline2 = AsyncPipeline(
-        consumers=openai_consumer_2(),
-        callbacks=TTSCallback(),
-    )
-    runner.add_pipeline(pipeline2)
+        pipe = AsyncPipeline(
+            producer=soundfile_producer(s_f, 50),
+            consumer=consume_fn,
+        )
 
-    runner.run()
+        async def read_data():
+            i = 0
+            async for data in pipe.wait_for_results():
+                if data is None:
+                    return
+                print(f"Task read: {i} -- {data}")
+                i += 1
+
+        async def shutdown_fn():
+            await asyncio.sleep(3)
+            pipe.shutdown()
+
+        async with trio.open_nursery() as nursery:
+            nursery.start_soon(pipe.produce_worker)
+            nursery.start_soon(pipe.consume_worker)
+            nursery.start_soon(read_data)
+
+    # trio.run(run_async_pipeline)
+    run_pipeline()
+    # trio.run(run_async_pipeline)
 

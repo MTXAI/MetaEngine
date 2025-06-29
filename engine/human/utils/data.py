@@ -1,8 +1,6 @@
 import copy
 import pickle
-from typing import Any, Dict
-
-from numpy import ndarray
+from typing import Any
 
 
 class Data(dict):

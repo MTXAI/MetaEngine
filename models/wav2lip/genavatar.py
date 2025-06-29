@@ -1,13 +1,15 @@
-from os import listdir, path
 import numpy as np
-import scipy, cv2, os, sys, argparse
-import json, subprocess, random, string
-from tqdm import tqdm
-from glob import glob
-import torch
 import pickle
-import face_detection
+from glob import glob
 
+import argparse
+import cv2
+import numpy as np
+import os
+import torch
+from tqdm import tqdm
+
+import face_detection
 
 parser = argparse.ArgumentParser(description='Inference code to lip-sync videos in the wild using Wav2Lip models')
 parser.add_argument('--img_size', default=96, type=int)

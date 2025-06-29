@@ -6,14 +6,8 @@
 ## pipeline 文字 - 文字 - 语音+视频 - 视频 两个 pipeline + 一个 player 匹配合成语音与视频
 ## pipeline 语音 - 文字 - 文字 - 语音+视频 - 视频 三个 pipeline + 一个 player 匹配合成语音与视频
 
-from os import PathLike
-from typing import AsyncGenerator, Tuple
-
-import soundfile
-
-from engine.agent.agents.smol.agents import QaAgent
 from engine.human.utils.data import Data
-from engine.utils.pipeline import AsyncConsumer, AsyncConsumerFactory, PipelineCallback
+from engine.utils.pipeline import AsyncConsumer, AsyncConsumerFactory
 
 
 ## Producer

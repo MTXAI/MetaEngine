@@ -1,6 +1,7 @@
 import os.path
 from pathlib import Path
 
+from engine.utils.common import get_device_and_start_method
 from engine.utils.config import EasyConfig
 
 
@@ -51,5 +52,38 @@ ONE_API_LLM_MODEL = LLMModelConfig(
         model_id="qwen-turbo",
         api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
         api_base_url="http://localhost:3000/v1",
+    )
+)
+
+_device, start_method = get_device_and_start_method()
+class RuntimeConfig(EasyConfig):
+    device: str
+    start_method: str
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.device = _device
+        self.start_method = start_method
+
+DEFAULT_RUNTIME_CONFIG = RuntimeConfig()
+
+
+class PlayerConfig(EasyConfig):
+    fps: int
+    sample_rate: int
+    batch_size: int
+    window_left: int
+    window_right: int
+    warmup_iters: int
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.warmup_iters = self.window_left + self.window_right
+
+WAV2LIP_PLAYER_CONFIG = PlayerConfig(
+    dict(
+        fps=50,
+        sample_rate=16000,
+        batch_size=16,
+        window_left=10,
+        window_right=10,
     )
 )

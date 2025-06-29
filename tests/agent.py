@@ -1,18 +1,13 @@
-import __init__
-
 import argparse
 import logging
-import os
 
 from smolagents import OpenAIServerModel
 
 from engine.agent.agents.smol.agents import QaAgent
 from engine.agent.model.history import History
-from engine.agent.vecdb.chroma import clean_db, create_db
 from engine.agent.tools.rag import RetrieverTool
+from engine.agent.vecdb.chroma import clean_db, create_db
 from engine.config import *
-
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -4,7 +4,6 @@ from typing import AsyncGenerator, Tuple, Union
 import soundfile
 
 from engine.human.utils.data import Data
-from engine.utils.pipeline import AsyncConsumer, AsyncConsumerFactory
 
 
 ## Producer
@@ -14,8 +13,7 @@ def soundfile_producer(f: Union[PathLike, str], chunk_size_or_fps: Union[Tuple, 
         chunk_stride = int(sample_rate / chunk_size_or_fps)  # sample rate 16000, fps 50, 20ms
     else:
         chunk_stride = chunk_size_or_fps[1] * 32  # [0, 10, 5] is 20ms
-
-    async def produce_fn() -> AsyncGenerator:
+    def produce_fn():
         total_chunk_num = int(len((speech) - 1) / chunk_stride + 1)
         for i in range(total_chunk_num):
             speech_chunk = speech[i * chunk_stride:(i + 1) * chunk_stride]
@@ -42,20 +40,20 @@ def websocket_producer():
 
 
 ## Consumer
-def asr_consumer() -> AsyncConsumer:
-    def consume_fn(data: Data, processed_data: Data=None):
-        pass
-
-    handler = None
-    return AsyncConsumerFactory.with_consume_fn(consume_fn, handler=handler)
-
-
-def async_asr_consumer() -> AsyncConsumer:
-    async def consume_fn(data: Data, processed_data: Data=None):
-        pass
-
-    handler = None
-    return AsyncConsumerFactory.with_consume_fn(consume_fn, handler=handler)
+# def asr_consumer() -> AsyncConsumer:
+#     def consume_fn(data: Data, processed_data: Data=None):
+#         pass
+#
+#     handler = None
+#     return AsyncConsumerFactory.with_consume_fn(consume_fn, handler=handler)
+#
+#
+# def async_asr_consumer() -> AsyncConsumer:
+#     async def consume_fn(data: Data, processed_data: Data=None):
+#         pass
+#
+#     handler = None
+#     return AsyncConsumerFactory.with_consume_fn(consume_fn, handler=handler)
 
 
 ## Callback

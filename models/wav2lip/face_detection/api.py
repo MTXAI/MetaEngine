@@ -1,16 +1,12 @@
 from __future__ import print_function
-import os
-import torch
-from torch.utils.model_zoo import load_url
+
 from enum import Enum
-import numpy as np
-import cv2
+
 try:
     import urllib.request as request_file
 except BaseException:
     import urllib as request_file
 
-from .models import FAN, ResNetDepth
 from .utils import *
 
 

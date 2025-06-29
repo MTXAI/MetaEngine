@@ -1,7 +1,7 @@
 from typing import List
 
-from langchain_unstructured import UnstructuredLoader
 from langchain_core.documents import Document
+from langchain_unstructured import UnstructuredLoader
 
 from engine.agent.file_rag.chinese_text_splitter import ChineseTextSplitter
 

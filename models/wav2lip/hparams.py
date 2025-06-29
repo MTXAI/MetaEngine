@@ -1,4 +1,3 @@
-from glob import glob
 import os
 
 def get_image_list(data_root, split):

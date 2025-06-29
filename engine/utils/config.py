@@ -8,19 +8,10 @@ from typing import Any, Dict, List, Tuple, Union
 import yaml
 from multimethod import multimethod
 
+from engine.utils.common import EasyDict
 
-class EasyConfig(dict):
-    def __getattr__(self, key: str) -> Any:
-        if key not in self:
-            raise AttributeError(key)
-        return self[key]
 
-    def __setattr__(self, key: str, value: Any) -> None:
-        self[key] = value
-
-    def __delattr__(self, key: str) -> None:
-        del self[key]
-
+class EasyConfig(EasyDict):
     def load(self, fpath: str, *, recursive: bool = False) -> None:
         """load cfg from yaml
 

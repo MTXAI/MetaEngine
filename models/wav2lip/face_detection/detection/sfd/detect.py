@@ -1,18 +1,6 @@
-import torch
+import cv2
 import torch.nn.functional as F
 
-import os
-import sys
-import cv2
-import random
-import datetime
-import math
-import argparse
-import numpy as np
-
-import scipy.io as sio
-import zipfile
-from .net_s3fd import s3fd
 from .bbox import *
 
 
