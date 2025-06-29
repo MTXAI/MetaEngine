@@ -74,6 +74,7 @@ class PlayerConfig(EasyConfig):
     window_left: int
     window_right: int
     warmup_iters: int
+    frame_interval: float
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.warmup_iters = self.window_left + self.window_right
@@ -85,5 +86,6 @@ WAV2LIP_PLAYER_CONFIG = PlayerConfig(
         batch_size=16,
         window_left=10,
         window_right=10,
+        frame_interval=1 / float(50) / 4,
     )
 )

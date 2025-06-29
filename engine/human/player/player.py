@@ -5,6 +5,7 @@ import traceback
 from concurrent.futures import Future
 from queue import Queue
 from typing import Tuple
+import time
 
 import cv2
 import numpy as np
@@ -28,11 +29,13 @@ class Player:
             avatar: Tuple,
             thread_pool: ThreadPool
     ):
+        print(config)
         self.config = config
         self.fps = config.fps
         self.sample_rate = config.sample_rate
         self.batch_size = config.batch_size
         self.chunk_size = int(self.sample_rate / self.fps)
+        self.frame_interval = config.frame_interval
         self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = avatar
         self.model = model
         self.stop_event = threading.Event()
@@ -47,6 +50,9 @@ class Player:
         self.frame_count = len(self.frame_list_cycle)
         self.frame_index = 0
         self.thread_pool = thread_pool
+        self.monitor_thread = None
+        self.monitor_running = False
+        self.debug = False
 
     def mirror_index(self, index):
         turn = index // self.frame_count
@@ -64,6 +70,7 @@ class Player:
             frame = self.get_audio_frame()
             self.frame_queue.put(frame)
             self.frame_batch.append(frame.get("data"))
+        self._print_queue_status("Warmup completed")
 
     def put_audio_data(self, data: Data):
         self.input_queue.put(data, timeout=1)
@@ -88,19 +95,24 @@ class Player:
                     frame = self.get_audio_frame()
                     self.frame_queue.put(frame, timeout=0.1)  # 添加超时
                     self.frame_batch.append(frame.get("data"))
+                    time.sleep(self.frame_interval)
                 audio_feature_batch = self.model.encode_audio_feature(self.frame_batch, self.config)
                 self.frame_batch = self.frame_batch[self.batch_size * 2:]
                 self.feature_queue.put(
                     Data(data=audio_feature_batch),
                     timeout=0.1
                 )
-                time.sleep(0.01)
+
+                # # 每处理一批数据后打印队列状态
+                # self._print_queue_status("After processing audio frame batch")
             except Exception as e:
                 print(f"Audio processing error: {e}")
                 traceback.print_exc()
                 time.sleep(0.1)
 
     def infer_video_frame_worker(self):
+        count = 0
+        counttime = 0
         while not self.stop_event.is_set():
             try:
                 try:
@@ -115,6 +127,9 @@ class Player:
                     audio_frames.append(frame_data)
 
                 silence = all(frame.get("state") == 0 for frame in audio_frames)
+                t = time.perf_counter()
+
+
                 if silence:
                     for i in range(self.batch_size):
                         video_frame = None
@@ -145,7 +160,6 @@ class Player:
                         print(f"Inference error: {e}")
                         traceback.print_exc()
                         continue
-
                     # 处理推理结果
                     for i, video_frame in enumerate(pred_img_batch):
                         audio_frame = audio_frames[i * 2:i * 2 + 2]
@@ -155,6 +169,16 @@ class Player:
                             timeout=0.1
                         )
                         self.update_index(1)
+                count += self.batch_size
+                counttime += (time.perf_counter() - t)
+                # _totalframe += 1
+                if count >= 100:
+                    print(f"------actual avg infer fps:{count / counttime:.4f}")
+                    count = 0
+                    counttime = 0
+
+                    # 每批推理完成后打印队列状态
+                    self._print_queue_status("After inference batch")
             except Exception as e:
                 print(f"Video inference error: {e}")
                 traceback.print_exc()
@@ -187,7 +211,7 @@ class Player:
                 image = new_frame
                 image[0, :] &= 0xFE  # 确保第一行是偶数，避免某些视频问题
                 new_frame = VideoFrame.from_ndarray(image, format="bgr24")
-                print(new_frame)
+                # print(new_frame)
 
                 # 处理音频帧
                 for frame_data in audio_frame:
@@ -196,7 +220,10 @@ class Player:
                     new_audio_frame = AudioFrame(format='s16', layout='mono', samples=frame.shape[0])
                     new_audio_frame.planes[0].update(frame.tobytes())
                     new_audio_frame.sample_rate = self.sample_rate
-                    print(new_audio_frame)
+                    # print(new_audio_frame)
+
+                # # 每处理一帧后打印队列状态
+                # self._print_queue_status("After processing output frame")
             except Exception as e:
                 print(f"Output processing error: {e}")
                 traceback.print_exc()
@@ -204,6 +231,15 @@ class Player:
 
     def start(self):
         self.warmup()
+
+        # 启动队列监控线程
+        if self.debug:
+            self.monitor_running = True
+            self.monitor_thread = threading.Thread(
+                target=self._queue_monitor,
+                daemon=True
+            )
+            self.monitor_thread.start()
 
         self.thread_pool.submit(
             self.process_audio_frame_worker,
@@ -217,10 +253,12 @@ class Player:
             self.process_output_frames_worker,
             task_info=TaskInfo(name="player.process_output_frames_worker")
         )
+        self._print_queue_status("Player started")
 
     def shutdown(self):
         # 设置停止事件
         self.stop_event.set()
+        self.monitor_running = False  # 停止监控线程
 
         # 清空队列，避免阻塞
         queues = [self.input_queue, self.frame_queue, self.feature_queue, self.output_queue]
@@ -230,6 +268,27 @@ class Player:
                     q.get_nowait()
                 except queue.Empty:
                     continue
+        self._print_queue_status("Player stopped, queues cleared")
+
+    def _print_queue_status(self, message: str = "Queue status"):
+        """打印当前所有队列的大小"""
+        input_size = self.input_queue.qsize()
+        frame_size = self.frame_queue.qsize()
+        feature_size = self.feature_queue.qsize()
+        output_size = self.output_queue.qsize()
+
+        print(f"[{time.strftime('%H:%M:%S')}] {message}:")
+        print(f"  Input queue size: {input_size}")
+        print(f"  Frame queue size: {frame_size}")
+        print(f"  Feature queue size: {feature_size}")
+        print(f"  Output queue size: {output_size}")
+        print()
+
+    def _queue_monitor(self):
+        """定期监控队列大小的后台线程"""
+        while self.monitor_running:
+            self._print_queue_status("Periodic queue monitor")
+            time.sleep(5)  # 每5秒监控一次
 
 
 if __name__ == '__main__':
@@ -273,7 +332,10 @@ if __name__ == '__main__':
     while True:
         if not producer_task.done() or not consumer_task.done():
             time.sleep(1)
+            continue
         else:
-            pipeline.shutdown()
-            player.shutdown()
-            pool.shutdown()
+            break
+    # pipeline.shutdown()
+    # player.shutdown()
+    pool.shutdown()
+
