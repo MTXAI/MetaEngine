@@ -1,6 +1,8 @@
 import copy
 import queue
 import threading
+import traceback
+from concurrent.futures import Future
 from queue import Queue
 from typing import Tuple
 
@@ -35,10 +37,11 @@ class Player:
         self.model = model
         self.stop_event = threading.Event()
 
+        # 设置队列最大大小，防止无限阻塞
         self.input_queue = Queue()
         self.frame_queue = Queue()
-        self.feature_queue = Queue(2)
-        self.output_queue = Queue(self.batch_size*2)
+        self.feature_queue = Queue()
+        self.output_queue = Queue(maxsize=self.batch_size * 2)
 
         self.frame_batch = []
         self.frame_count = len(self.frame_list_cycle)
@@ -59,12 +62,11 @@ class Player:
     def warmup(self):
         for _ in range(self.config.warmup_iters):
             frame = self.get_audio_frame()
-            self.frame_batch.append(frame)
-        for _ in range(self.config.warmup_iters // 2):
-            self.output_queue.get()
+            self.frame_queue.put(frame)
+            self.frame_batch.append(frame.get("data"))
 
     def put_audio_data(self, data: Data):
-        self.input_queue.put(data)
+        self.input_queue.put(data, timeout=1)
 
     def get_audio_frame(self) -> Data:
         try:
@@ -81,162 +83,197 @@ class Player:
 
     def process_audio_frame_worker(self):
         while not self.stop_event.is_set():
-            for _ in range(self.batch_size * 2):
-                frame = self.get_audio_frame()
-                self.frame_queue.put(frame)
-                self.frame_batch.append(frame.data)
-            audio_feature_batch = self.model.encode_audio_feature(self.frame_batch, self.config)
-            self.frame_batch = self.frame_batch[self.batch_size * 2:]
-            self.feature_queue.put(
-                Data(
-                    data=audio_feature_batch,
+            try:
+                for _ in range(self.batch_size * 2):
+                    frame = self.get_audio_frame()
+                    self.frame_queue.put(frame, timeout=0.1)  # 添加超时
+                    self.frame_batch.append(frame.get("data"))
+                audio_feature_batch = self.model.encode_audio_feature(self.frame_batch, self.config)
+                self.frame_batch = self.frame_batch[self.batch_size * 2:]
+                self.feature_queue.put(
+                    Data(data=audio_feature_batch),
+                    timeout=0.1
                 )
-            )
+                time.sleep(0.01)
+            except Exception as e:
+                print(f"Audio processing error: {e}")
+                traceback.print_exc()
+                time.sleep(0.1)
 
     def infer_video_frame_worker(self):
         while not self.stop_event.is_set():
             try:
-                audio_feature_data = self.feature_queue.get(timeout=1)
+                try:
+                    audio_feature_data = self.feature_queue.get(timeout=0.5)
+                except queue.Empty:
+                    continue
+
                 audio_feature_batch = audio_feature_data.get("data")
-            except queue.Empty:
-                continue
+                audio_frames = []
+                for _ in range(self.batch_size * 2):
+                    frame_data = self.frame_queue.get(timeout=0.1)
+                    audio_frames.append(frame_data)
 
-            audio_frames = []
-            silence = True
-            for _ in range(self.batch_size * 2):
-                frame_data = self.frame_queue.get(timeout=0.1)
-                state = frame_data.get("state")
-                audio_frames.append(frame_data)
-                if state == 1:
-                    silence = False
-            if silence:
-                for i in range(self.batch_size):
-                    video_frame, audio_frame, frame_index = None, audio_frames[i*2:i*2+2], self.mirror_index(self.frame_index)
-                    self.output_queue.put(
-                        (video_frame, audio_frame, frame_index)
-                    )
-                    self.update_index(1)
-            else:
-                face_img_batch = []
-                for i in range(self.batch_size):
-                    frame_index = self.mirror_index(self.frame_index+i)
-                    face_img = self.frame_list_cycle[frame_index]
-                    face_img_batch.append(face_img)
-                face_img_batch, audio_feature_batch = np.asarray(face_img_batch), np.asarray(audio_feature_batch)
-                face_img_batch = torch.FloatTensor(face_img_batch).to(DEFAULT_RUNTIME_CONFIG.device)
-                audio_feature_batch = torch.FloatTensor(audio_feature_batch).to(DEFAULT_RUNTIME_CONFIG.device)
+                silence = all(frame.get("state") == 0 for frame in audio_frames)
+                if silence:
+                    for i in range(self.batch_size):
+                        video_frame = None
+                        audio_frame = audio_frames[i * 2:i * 2 + 2]
+                        frame_index = self.mirror_index(self.frame_index)
+                        self.output_queue.put(
+                            (video_frame, audio_frame, frame_index),
+                            timeout=0.1
+                        )
+                        self.update_index(1)
+                else:
+                    face_img_batch = []
+                    for i in range(self.batch_size):
+                        frame_index = self.mirror_index(self.frame_index + i)
+                        face_img = self.face_list_cycle[frame_index]
+                        face_img_batch.append(face_img)
 
-                with torch.no_grad():
-                    pred_img_batch = self.model.inference(audio_feature_batch, face_img_batch, self.config)
+                    # 模型推理
+                    face_img_batch = np.asarray(face_img_batch)
+                    audio_feature_batch = np.asarray(audio_feature_batch)
+                    face_img_batch = torch.FloatTensor(face_img_batch).to(DEFAULT_RUNTIME_CONFIG.device)
+                    audio_feature_batch = torch.FloatTensor(audio_feature_batch).to(DEFAULT_RUNTIME_CONFIG.device)
 
-                for i, video_frame in enumerate(pred_img_batch):
-                    audio_frame, frame_index = audio_frames[i*2:i*2+2], self.mirror_index(self.frame_index)
-                    self.output_queue.put(
-                        (video_frame, audio_frame, frame_index)
-                    )
-                    self.update_index(1)
+                    try:
+                        with torch.no_grad():
+                            pred_img_batch = self.model.inference(audio_feature_batch, face_img_batch, self.config)
+                    except Exception as e:
+                        print(f"Inference error: {e}")
+                        traceback.print_exc()
+                        continue
+
+                    # 处理推理结果
+                    for i, video_frame in enumerate(pred_img_batch):
+                        audio_frame = audio_frames[i * 2:i * 2 + 2]
+                        frame_index = self.mirror_index(self.frame_index)
+                        self.output_queue.put(
+                            (video_frame, audio_frame, frame_index),
+                            timeout=0.1
+                        )
+                        self.update_index(1)
+            except Exception as e:
+                print(f"Video inference error: {e}")
+                traceback.print_exc()
+                time.sleep(0.1)  # 出错后短暂休眠
 
     def process_output_frames_worker(self):
         while not self.stop_event.is_set():
             try:
-                output_frame = self.output_queue.get(timeout=1)
-            except queue.Empty:
-                continue
-            video_frame, audio_frame, frame_index = output_frame
+                # 非阻塞获取输出帧
+                try:
+                    output_frame = self.output_queue.get(timeout=0.5)
+                except queue.Empty:
+                    continue
 
-            if audio_frame[0].get('state') == 0 and audio_frame[1].get('state') == 0:
-                new_frame = self.frame_list_cycle[frame_index]
-            else:
-                new_frame = copy.deepcopy(self.frame_list_cycle[frame_index])
-                bbox = self.coord_list_cycle[frame_index]
-                y1, y2, x1, x2 = bbox
-                video_frame = cv2.resize(video_frame.astype(np.uint8), (x2 - x1, y2 - y1))
-                new_frame[y1:y2, x1:x2] = video_frame
+                video_frame, audio_frame, frame_index = output_frame
 
-            image = new_frame
-            image[0, :] &= 0xFE
-            new_frame = VideoFrame.from_ndarray(image, format="bgr24")
-            print(new_frame)
+                # 处理视频帧
+                if audio_frame[0].get('state') == 0 and audio_frame[1].get('state') == 0:
+                    new_frame = self.frame_list_cycle[frame_index]
+                else:
+                    new_frame = copy.deepcopy(self.frame_list_cycle[frame_index])
+                    bbox = self.coord_list_cycle[frame_index]
+                    y1, y2, x1, x2 = bbox
 
-            for frame_data in audio_frame:
-                frame, state = frame_data.get('data'), frame_data.get('state')
-                frame = (frame * 32767).astype(np.int16)
+                    if video_frame is not None:
+                        video_frame = cv2.resize(video_frame.astype(np.uint8), (x2 - x1, y2 - y1))
+                        new_frame[y1:y2, x1:x2] = video_frame
 
-                new_frame = AudioFrame(format='s16', layout='mono', samples=frame.shape[0])
-                new_frame.planes[0].update(frame.tobytes())
-                new_frame.sample_rate = self.sample_rate
+                # 创建视频帧
+                image = new_frame
+                image[0, :] &= 0xFE  # 确保第一行是偶数，避免某些视频问题
+                new_frame = VideoFrame.from_ndarray(image, format="bgr24")
                 print(new_frame)
+
+                # 处理音频帧
+                for frame_data in audio_frame:
+                    frame, state = frame_data.get('data'), frame_data.get('state')
+                    frame = (frame * 32767).astype(np.int16)
+                    new_audio_frame = AudioFrame(format='s16', layout='mono', samples=frame.shape[0])
+                    new_audio_frame.planes[0].update(frame.tobytes())
+                    new_audio_frame.sample_rate = self.sample_rate
+                    print(new_audio_frame)
+            except Exception as e:
+                print(f"Output processing error: {e}")
+                traceback.print_exc()
+                time.sleep(0.1)  # 出错后短暂休眠
 
     def start(self):
         self.warmup()
+
         self.thread_pool.submit(
             self.process_audio_frame_worker,
-            task_info=TaskInfo(
-                name="player.process_audio_frame_worker",
-            )
-        )
+            task_info=TaskInfo(name="player.process_audio_frame_worker")
+        ),
         self.thread_pool.submit(
             self.infer_video_frame_worker,
-            task_info=TaskInfo(
-                name="player.infer_video_frame_worker",
-            )
-        )
+            task_info=TaskInfo(name="player.infer_video_frame_worker")
+        ),
         self.thread_pool.submit(
             self.process_output_frames_worker,
-            task_info=TaskInfo(
-                name="player.process_output_frames_worker",
-            )
+            task_info=TaskInfo(name="player.process_output_frames_worker")
         )
 
-    def stop(self):
+    def shutdown(self):
+        # 设置停止事件
         self.stop_event.set()
+
+        # 清空队列，避免阻塞
+        queues = [self.input_queue, self.frame_queue, self.feature_queue, self.output_queue]
+        for q in queues:
+            while not q.empty():
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    continue
 
 
 if __name__ == '__main__':
     from engine.config import WAV2LIP_PLAYER_CONFIG
     from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
     from engine.utils.pool import ThreadPool
-    import threading
-    from engine.human.voice.asr import soundfile_producer
-    import trio
-    from engine.utils.pipeline import AsyncPipeline, Pipeline
+    import time
 
     f = '../../../avatars/wav2lip256_avatar1'
     s_f = '../../../tests/test_datas/asr.wav'
     c_f = '../../../checkpoints/wav2lip.pth'
-    model = Wav2LipWrapper(
-        c_f
-    )
-    pool = ThreadPool(
-        max_workers=4,
-        max_queue_size=10,
-    )
-    player = Player(
-        WAV2LIP_PLAYER_CONFIG,
-        model,
-        load_avatar(f),
-        pool
-    )
+    model = Wav2LipWrapper(c_f)
+    pool = ThreadPool(max_workers=4, max_queue_size=10)
+
+    # 创建Player实例并启动
+    player = Player(WAV2LIP_PLAYER_CONFIG, model, load_avatar(f), pool)
     player.start()
 
+    # 设置音频数据生产者
     def consume_fn(data):
         player.put_audio_data(data)
         return data
+
+    from engine.human.voice.asr import soundfile_producer
+    from engine.utils.pipeline import Pipeline
+
     pipeline = Pipeline(
         producer=soundfile_producer(s_f, chunk_size_or_fps=player.fps),
         consumer=consume_fn,
     )
-    pool.submit(
+
+    producer_task = pool.submit(
         pipeline.produce_worker,
-        task_info=TaskInfo(
-            name="Task producer",
-        ),
+        task_info=TaskInfo(name="Task producer")
     )
-    pool.submit(
+    consumer_task = pool.submit(
         pipeline.consume_worker,
-        task_info=TaskInfo(
-            name="Task consumer",
-        ),
+        task_info=TaskInfo(name="Task consumer")
     )
 
-    pool.shutdown()
+    while True:
+        if not producer_task.done() or not consumer_task.done():
+            time.sleep(1)
+        else:
+            pipeline.shutdown()
+            player.shutdown()
+            pool.shutdown()
