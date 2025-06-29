@@ -24,7 +24,6 @@ class Player:
             config: PlayerConfig,
             model: ModelWrapper,
             avatar: Tuple,
-            stop_event: threading.Event,
             thread_pool: ThreadPool
     ):
         self.config = config
@@ -34,12 +33,12 @@ class Player:
         self.chunk_size = int(self.sample_rate / self.fps)
         self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = avatar
         self.model = model
-        self.stop_event = stop_event
+        self.stop_event = threading.Event()
 
-        self.input_queue = mp.Queue()
-        self.frame_queue = mp.Queue()
-        self.feature_queue = mp.Queue(2)
-        self.output_queue = mp.Queue(self.batch_size*2)
+        self.input_queue = Queue()
+        self.frame_queue = Queue()
+        self.feature_queue = Queue(2)
+        self.output_queue = Queue(self.batch_size*2)
 
         self.frame_batch = []
         self.frame_count = len(self.frame_list_cycle)
@@ -80,21 +79,21 @@ class Player:
             state=state,
         )
 
-    def process_audio_frame(self):
-        print('a')
-        for _ in range(self.batch_size * 2):
-            frame = self.get_audio_frame()
-            self.frame_queue.put(frame)
-            self.frame_batch.append(frame.data)
-        audio_feature_batch = self.model.encode_audio_feature(self.frame_batch, self.config)
-        self.frame_batch = self.frame_batch[self.batch_size * 2:]
-        self.feature_queue.put(
-            Data(
-                data=audio_feature_batch,
+    def process_audio_frame_worker(self):
+        while not self.stop_event.is_set():
+            for _ in range(self.batch_size * 2):
+                frame = self.get_audio_frame()
+                self.frame_queue.put(frame)
+                self.frame_batch.append(frame.data)
+            audio_feature_batch = self.model.encode_audio_feature(self.frame_batch, self.config)
+            self.frame_batch = self.frame_batch[self.batch_size * 2:]
+            self.feature_queue.put(
+                Data(
+                    data=audio_feature_batch,
+                )
             )
-        )
 
-    def infer_video_frame(self):
+    def infer_video_frame_worker(self):
         while not self.stop_event.is_set():
             try:
                 audio_feature_data = self.feature_queue.get(timeout=1)
@@ -102,17 +101,16 @@ class Player:
             except queue.Empty:
                 continue
 
-            batch_size = audio_feature_batch.shape[0]
             audio_frames = []
             silence = True
-            for _ in range(batch_size * 2):
+            for _ in range(self.batch_size * 2):
                 frame_data = self.frame_queue.get(timeout=0.1)
                 state = frame_data.get("state")
                 audio_frames.append(frame_data)
                 if state == 1:
                     silence = False
             if silence:
-                for i in range(batch_size):
+                for i in range(self.batch_size):
                     video_frame, audio_frame, frame_index = None, audio_frames[i*2:i*2+2], self.mirror_index(self.frame_index)
                     self.output_queue.put(
                         (video_frame, audio_frame, frame_index)
@@ -120,7 +118,7 @@ class Player:
                     self.update_index(1)
             else:
                 face_img_batch = []
-                for i in range(batch_size):
+                for i in range(self.batch_size):
                     frame_index = self.mirror_index(self.frame_index+i)
                     face_img = self.frame_list_cycle[frame_index]
                     face_img_batch.append(face_img)
@@ -138,16 +136,7 @@ class Player:
                     )
                     self.update_index(1)
 
-    def process_video_frame(self, frame_index, pred_frame=None):
-        new_frame = copy.deepcopy(self.frame_list_cycle[frame_index])
-
-        bbox = self.coord_list_cycle[frame_index]
-        y1, y2, x1, x2 = bbox
-        pred_frame = cv2.resize(pred_frame.astype(np.uint8), (x2 - x1, y2 - y1))
-        new_frame[y1:y2, x1:x2] = pred_frame
-        return new_frame
-
-    def process_output_frames(self):
+    def process_output_frames_worker(self):
         while not self.stop_event.is_set():
             try:
                 output_frame = self.output_queue.get(timeout=1)
@@ -158,7 +147,11 @@ class Player:
             if audio_frame[0].get('state') == 0 and audio_frame[1].get('state') == 0:
                 new_frame = self.frame_list_cycle[frame_index]
             else:
-                new_frame = self.process_video_frame(frame_index, video_frame)
+                new_frame = copy.deepcopy(self.frame_list_cycle[frame_index])
+                bbox = self.coord_list_cycle[frame_index]
+                y1, y2, x1, x2 = bbox
+                video_frame = cv2.resize(video_frame.astype(np.uint8), (x2 - x1, y2 - y1))
+                new_frame[y1:y2, x1:x2] = video_frame
 
             image = new_frame
             image[0, :] &= 0xFE
@@ -174,12 +167,30 @@ class Player:
                 new_frame.sample_rate = self.sample_rate
                 print(new_frame)
 
-    def run(self):
+    def start(self):
         self.warmup()
-        threading.Thread(target=self.process_output_frames).start()
-        threading.Thread(target=self.infer_video_frame).start()
-        while not self.stop_event.is_set():
-            self.process_audio_frame()
+        self.thread_pool.submit(
+            self.process_audio_frame_worker,
+            task_info=TaskInfo(
+                name="player.process_audio_frame_worker",
+            )
+        )
+        self.thread_pool.submit(
+            self.infer_video_frame_worker,
+            task_info=TaskInfo(
+                name="player.infer_video_frame_worker",
+            )
+        )
+        self.thread_pool.submit(
+            self.process_output_frames_worker,
+            task_info=TaskInfo(
+                name="player.process_output_frames_worker",
+            )
+        )
+
+    def stop(self):
+        self.stop_event.set()
+
 
 if __name__ == '__main__':
     from engine.config import WAV2LIP_PLAYER_CONFIG
@@ -200,33 +211,13 @@ if __name__ == '__main__':
         max_workers=4,
         max_queue_size=10,
     )
-    stop_event = threading.Event()
     player = Player(
         WAV2LIP_PLAYER_CONFIG,
         model,
         load_avatar(f),
-        stop_event,
         pool
     )
-
-    # pool.submit(
-    #     player.process_audio_frame,
-    #     task_info=TaskInfo(
-    #         name="player.process_audio_frame",
-    #     ),
-    # )
-    # pool.submit(
-    #     player.infer_video_frame,
-    #     task_info=TaskInfo(
-    #         name="player.infer_video_frame",
-    #     ),
-    # )
-    # pool.submit(
-    #     player.process_output_frames,
-    #     task_info=TaskInfo(
-    #         name="player.process_output_frames",
-    #     ),
-    # )
+    player.start()
 
     def consume_fn(data):
         player.put_audio_data(data)
@@ -247,7 +238,5 @@ if __name__ == '__main__':
             name="Task consumer",
         ),
     )
-
-    threading.Thread(target=player.run).start()
 
     pool.shutdown()

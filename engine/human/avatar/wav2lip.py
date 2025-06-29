@@ -90,4 +90,5 @@ class Wav2LipWrapper(ModelWrapper):
         audio_feature_batch = audio_feature_batch.permute(0, 3, 1, 2)
         face_img_batch = face_img_batch.permute(0, 3, 1, 2)
         pred_img_batch = self.model(audio_feature_batch, face_img_batch)
+        pred_img_batch = pred_img_batch.cpu().numpy().transpose(0, 2, 3, 1) * 255.
         return pred_img_batch
