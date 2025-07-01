@@ -1,5 +1,5 @@
 from os import PathLike
-from typing import AsyncGenerator, Tuple, Union
+from typing import AsyncGenerator, Union
 
 import soundfile
 

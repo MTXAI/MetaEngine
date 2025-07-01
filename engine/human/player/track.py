@@ -1,9 +1,7 @@
 import asyncio
 import fractions
-import logging
-import sys
 import time
-from typing import Union, List
+from typing import Union
 
 from aiortc import MediaStreamTrack
 from av import AudioFrame, VideoFrame

@@ -5,7 +5,6 @@ from queue import Queue
 from typing import Callable, Tuple, Union
 
 from engine.human.utils.data import Data
-from engine.utils.pool import TaskCallback, TaskInfo
 
 
 class PipelineCallback:
@@ -235,7 +234,6 @@ if __name__ == '__main__':
 
     async def run_async_pipeline():
 
-        import trio
         from os import PathLike
         import soundfile
 

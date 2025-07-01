@@ -2,20 +2,18 @@ import asyncio
 import copy
 import queue
 import threading
-import time
 import traceback
+from typing import Tuple
 
 import cv2
 import numpy as np
-from typing import List, Optional, Dict, Tuple
-
 import torch
 from av import AudioFrame, VideoFrame
 from torch import nn
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import ModelWrapper
-from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
+from engine.human.player.track import StreamTrackSync
 from engine.human.utils.data import Data
 
 

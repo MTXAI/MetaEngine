@@ -1,11 +1,10 @@
-import numpy as np
+import argparse
+import os
 import pickle
 from glob import glob
 
-import argparse
 import cv2
 import numpy as np
-import os
 import torch
 from tqdm import tqdm
 

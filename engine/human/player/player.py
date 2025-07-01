@@ -7,8 +7,6 @@ from engine.human.avatar.avatar import ModelWrapper
 from engine.human.player.container import AudioContainer, VideoContainer
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
 from engine.utils.pipeline import Pipeline
-from engine.runtime import thread_pool
-from engine.utils.pool import TaskInfo
 
 
 class HumanPlayer:

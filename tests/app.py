@@ -1,21 +1,14 @@
 import asyncio
+import json
+import logging
 import traceback
 
 from aiohttp import web, WSMessage
-import json
-import logging
-import ssl
-
-from aiohttp.web_ws import WebSocketResponse
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
 
 from engine.config import WAV2LIP_PLAYER_CONFIG
-from engine.human.player.player import HumanPlayer
-from engine.human.player.track import VideoStreamTrack, StreamTrackSync
-from engine.config import WAV2LIP_PLAYER_CONFIG
 from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
-from engine.runtime import thread_pool
-from engine.utils.pool import TaskInfo
+from engine.human.player.player import HumanPlayer
 from engine.human.voice.asr import soundfile_producer
 
 f = '../avatars/wav2lip256_avatar1'

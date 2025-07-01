@@ -11,7 +11,6 @@ from tqdm import tqdm
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import ModelWrapper
-from engine.human.utils.data import Data
 from models.wav2lip.audio import melspectrogram
 from models.wav2lip.models import Wav2Lip
 
