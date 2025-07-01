@@ -95,16 +95,13 @@ def _cached_log_stream(filename):
     return open(filename, "a")
 
 
-def init_logging():
-    from engine.config import APP_LOG_FILE
-
-    setup_logger_dist(str(APP_LOG_FILE), 0, name='MetaEngine')
-
-
-init_logging()
+def init_logging(log_file):
+    setup_logger_dist(str(log_file), 0, name='MetaEngine')
 
 
 if __name__ == '__main__':
+    init_logging()
+
     import logging
     logging.info("hello world")
 

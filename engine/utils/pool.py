@@ -6,7 +6,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from queue import Queue, Full
-from typing import Optional, List, Union, TypeVar, Callable, AsyncGenerator
+from typing import Optional, List, Union, TypeVar, Callable, AsyncGenerator, Set, Awaitable
 
 from engine.utils.common import EasyDict
 
@@ -121,127 +121,6 @@ class ThreadPool:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.shutdown()
-
-
-T = TypeVar('T')
-class CoroutinePool:
-    """异步协程运行器，支持任务提交、并发控制和上下文管理"""
-
-    def __init__(self, max_concurrency: int = 10, loop: Optional[asyncio.AbstractEventLoop] = None):
-        """
-        初始化协程运行器
-
-        Args:
-            max_concurrency: 最大并发协程数
-            loop: 可选的事件循环实例
-        """
-        self.max_concurrency = max_concurrency
-        self._loop = loop or asyncio.get_event_loop()
-        self._semaphore = asyncio.Semaphore(max_concurrency)
-        self._tasks: List[asyncio.Task] = []
-        self._is_shutdown = False
-        self._results: asyncio.Queue[Union[T, Exception]] = asyncio.Queue()
-
-    async def __aenter__(self) -> 'CoroutineRunner':
-        """进入异步上下文管理器"""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """退出异步上下文管理器，自动关闭运行器"""
-        await self.shutdown(wait=True)
-
-    async def submit(self, func: Callable[..., Union[T, AsyncGenerator[T, None]]], *args, **kwargs) -> None:
-        """
-        提交一个协程函数或异步生成器到运行器执行
-
-        Args:
-            func: 协程函数或异步生成器函数
-            *args: 位置参数
-            **kwargs: 关键字参数
-        """
-        if self._is_shutdown:
-            raise RuntimeError("Runner is already shut down")
-
-        # 等待获取信号量，控制并发
-        await self._semaphore.acquire()
-
-        # 创建任务
-        if asyncio.iscoroutinefunction(func):
-            # 普通协程函数
-            task = self._loop.create_task(self._wrap_coroutine(func, *args, **kwargs))
-        else:
-            # 异步生成器函数
-            task = self._loop.create_task(self._wrap_generator(func, *args, **kwargs))
-
-        self._tasks.append(task)
-
-        # 设置任务完成回调
-        def _on_task_done(fut: asyncio.Future) -> None:
-            self._semaphore.release()
-            # 从任务列表中移除已完成的任务
-            if fut in self._tasks:
-                self._tasks.remove(fut)
-
-        task.add_done_callback(_on_task_done)
-
-    async def _wrap_coroutine(self, func: Callable[..., T], *args, **kwargs) -> None:
-        """包装普通协程函数，处理结果和异常"""
-        try:
-            result = await func(*args, **kwargs)
-            await self._results.put(result)
-        except Exception as e:
-            await self._results.put(e)
-
-    async def _wrap_generator(self, func: Callable[..., AsyncGenerator[T, None]], *args, **kwargs) -> None:
-        """包装异步生成器函数，处理每个生成的值和异常"""
-        try:
-            async for item in func(*args, **kwargs):
-                await self._results.put(item)
-        except Exception as e:
-            await self._results.put(e)
-
-    async def shutdown(self, wait: bool = True) -> None:
-        """
-        关闭运行器，停止所有未完成的任务
-
-        Args:
-            wait: 是否等待所有任务完成
-        """
-        self._is_shutdown = True
-
-        if wait:
-            # 等待所有任务完成
-            if self._tasks:
-                await asyncio.gather(*self._tasks, return_exceptions=True)
-        else:
-            # 取消所有未完成的任务
-            for task in self._tasks:
-                if not task.done():
-                    task.cancel()
-
-            # 等待取消操作完成
-            if self._tasks:
-                await asyncio.gather(*self._tasks, return_exceptions=True)
-
-        # 清空任务列表
-        self._tasks.clear()
-
-    async def results(self) -> AsyncGenerator[Union[T, Exception], None]:
-        """
-        获取所有任务的结果，包括异常
-
-        Yields:
-            任务的结果或抛出的异常
-        """
-        while self._tasks or not self._results.empty():
-            try:
-                # 设置超时避免永久阻塞
-                result = await asyncio.wait_for(self._results.get(), timeout=0.1)
-                yield result
-                self._results.task_done()
-            except asyncio.TimeoutError:
-                # 继续检查是否有更多结果
-                continue
 
 
 if __name__ == "__main__":

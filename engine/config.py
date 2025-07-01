@@ -68,7 +68,7 @@ class RuntimeConfig(EasyConfig):
 
 DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
     dict(
-        max_workers=4,
+        max_workers=8,
         max_queue_size=12,
     )
 )
@@ -81,7 +81,10 @@ class PlayerConfig(EasyConfig):
     window_left: int
     window_right: int
     warmup_iters: int
-    frame_interval: float
+    timeout: float
+    audio_ptime: float
+    video_ptime: float
+    video_clock_rate: int
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.warmup_iters = self.window_left + self.window_right
@@ -93,7 +96,10 @@ WAV2LIP_PLAYER_CONFIG = PlayerConfig(
         batch_size=16,
         window_left=10,
         window_right=10,
-        frame_interval=1 / float(50) / 4,
+        timeout=1 / float(50) / 2,
+        audio_ptime=0.02,
+        video_ptime=0.02,
+        video_clock_rate=90000,
     )
 )
 
