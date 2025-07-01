@@ -91,14 +91,14 @@ class PlayerConfig(EasyConfig):
 
 WAV2LIP_PLAYER_CONFIG = PlayerConfig(
     dict(
-        fps=50,
+        fps=90,
         sample_rate=16000,
         batch_size=16,
         window_left=10,
         window_right=10,
         timeout=1 / float(50) / 2,
         audio_ptime=0.02,
-        video_ptime=0.02,
+        video_ptime=0.04,
         video_clock_rate=90000,
     )
 )

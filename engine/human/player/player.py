@@ -123,8 +123,8 @@ if __name__ == '__main__':
     async def listen_video():
         i = 0
         counttime = 0
-        t = time.perf_counter()
         while True:
+            t = time.perf_counter()
             await asyncio.sleep(0.01)
             frame = await player.video_track.recv()
             counttime += (time.perf_counter() - t)

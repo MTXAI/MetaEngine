@@ -36,7 +36,6 @@ class AudioContainer:
         self.fps = config.fps
         self.sample_rate = config.sample_rate
         self.timeout = config.timeout
-        self.audio_ptime = config.audio_ptime  # 每帧的秒数间隔
         self.chunk_size = int(self.sample_rate / self.fps)
         self.batch_size = config.batch_size
         self.model = model
@@ -93,16 +92,12 @@ class AudioContainer:
         while not self._stop_event.is_set():
             try:
                 silence = True
-                start_time = time.monotonic()
                 for i in range(self.batch_size * 2):
                     chunk, state, frame = self._read_frame()
                     asyncio.run_coroutine_threadsafe(self.track.put_frame(frame), self.loop)
                     self.frame_batch.append(chunk)
                     if state == 1:
                         silence = False
-                    wait_time = start_time + i*self.audio_ptime - time.monotonic()
-                    if wait_time > 0:
-                        time.sleep(wait_time)
                 audio_feature_batch = self.model.encode_audio_feature(self.frame_batch, self.config)
                 self.frame_batch = self.frame_batch[self.batch_size * 2:]
                 yield Data(
