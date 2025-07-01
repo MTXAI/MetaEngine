@@ -4,10 +4,8 @@ import threading
 from queue import Queue
 from typing import Callable, Tuple, Union
 
-import trio
-
 from engine.human.utils.data import Data
-from engine.utils.pool import TaskCallback, ThreadPool, TaskInfo
+from engine.utils.pool import TaskCallback, TaskInfo
 
 
 class PipelineCallback:
@@ -73,22 +71,22 @@ class Pipeline:
         self._stop_event.set()
 
 
-
 class AsyncPipeline:
     def __init__(
             self,
             producer: Callable,
             consumer: Callable,
+            to_producer: bool = False,
             generator: Callable=None,
             timeout: float=0.1,
-            channel_size: int = 100,
             **kwargs
         ):
         self.producer = producer
         self.consumer = consumer
         self.generator = generator
-        self.sender, self.receiver = trio.open_memory_channel(channel_size)
-        self.output_sender, self.output_receiver = trio.open_memory_channel(channel_size)
+        self.queue = asyncio.Queue()
+        self.to_producer = to_producer
+        self.output_queue = asyncio.Queue()
         self.timeout = timeout
         self._stop_event = asyncio.Event()
 
@@ -96,28 +94,43 @@ class AsyncPipeline:
         async for data in self.producer():
             if self._stop_event.is_set():
                 break
-            await self.sender.send(data)
-        await self.sender.aclose()
+            await self.queue.put(data)
 
     async def consume_worker(self):
-        async for data in self.receiver:
-            await self.output_sender.send(data)
-        await self.receiver.aclose()
-        await self.output_sender.aclose()
+        while not self._stop_event.is_set() or not self.queue.empty():
+            try:
+                data = await asyncio.wait_for(self.queue.get(), timeout=self.timeout)
+            except asyncio.TimeoutError:
+                continue
+            if asyncio.iscoroutinefunction(self.consumer):
+                data = await self.consumer(data)
+            else:
+                data = self.consumer(data)
+            if self.to_producer:
+                await self.output_queue.put(data)
 
     async def wait_for_results(self):
-        async for data in self.output_receiver:
+        if not self.to_producer:
+            yield None
+            return
+        while not self._stop_event.is_set() or not self.output_queue.empty():
+            try:
+                data = await asyncio.wait_for(self.output_queue.get(), timeout=self.timeout)
+            except asyncio.TimeoutError:
+                continue
             if self.generator is not None:
                 for _data in self.generator(data):
                     yield _data
             else:
                 yield data
-        await self.output_receiver.aclose()
 
     def shutdown(self):
         self._stop_event.set()
 
 if __name__ == '__main__':
+    from engine.utils.pool import TaskCallback, ThreadPool, TaskInfo, CoroutinePool
+
+
     class SimpleCallback(TaskCallback):
         def on_submit(self, future, task_info):
             print(f"Task submitted: {future}, info: {task_info}")
@@ -270,12 +283,13 @@ if __name__ == '__main__':
             await asyncio.sleep(3)
             pipe.shutdown()
 
-        async with trio.open_nursery() as nursery:
-            nursery.start_soon(pipe.produce_worker)
-            nursery.start_soon(pipe.consume_worker)
-            nursery.start_soon(read_data)
+        async with CoroutinePool() as pool:
+            await pool.submit(pipe.produce_worker)
+            await pool.submit(pipe.consume_worker)
+            await pool.submit(read_data)
+            await pool.submit(shutdown_fn)
 
     # trio.run(run_async_pipeline)
-    run_pipeline()
-    # trio.run(run_async_pipeline)
+    # run_pipeline()
+    asyncio.run(run_async_pipeline())
 

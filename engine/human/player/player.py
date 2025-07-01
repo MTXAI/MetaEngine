@@ -158,8 +158,13 @@ class Player:
                     audio_feature_batch = torch.FloatTensor(audio_feature_batch).to(DEFAULT_RUNTIME_CONFIG.device)
 
                     try:
+                        start = time.perf_counter()
                         with torch.no_grad():
                             pred_img_batch = self.model.inference(audio_feature_batch, face_img_batch, self.config)
+                        end = time.perf_counter()
+                        elapsed = end - start
+                        if elapsed > float(1/self.fps):
+                            print("Warning: inference took {:.3f} seconds, real fps < expect fps.".format(elapsed))
                     except Exception as e:
                         print(f"Inference error: {e}")
                         traceback.print_exc()
@@ -323,7 +328,7 @@ if __name__ == '__main__':
     from engine.utils.pipeline import Pipeline
 
     pipeline = Pipeline(
-        producer=soundfile_producer(s_f, chunk_size_or_fps=player.fps),
+        producer=soundfile_producer(s_f, fps=player.fps),
         consumer=consume_fn,
     )
 

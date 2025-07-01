@@ -689,7 +689,7 @@ if __name__ == '__main__':
     from engine.utils.pipeline import Pipeline
 
     pipeline = Pipeline(
-        producer=soundfile_producer(s_f, chunk_size_or_fps=player.fps),
+        producer=soundfile_producer(s_f, fps=player.fps),
         consumer=consume_fn,
     )
 

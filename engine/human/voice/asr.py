@@ -7,12 +7,9 @@ from engine.human.utils.data import Data
 
 
 ## Producer
-def soundfile_producer(f: Union[PathLike, str], chunk_size_or_fps: Union[Tuple, int]):
+def soundfile_producer(f: Union[PathLike, str], fps: int):
     speech, sample_rate = soundfile.read(f)
-    if isinstance(chunk_size_or_fps, int):
-        chunk_stride = int(sample_rate / chunk_size_or_fps)  # sample rate 16000, fps 50, 20ms
-    else:
-        chunk_stride = chunk_size_or_fps[1] * 32  # [0, 10, 5] is 20ms
+    chunk_stride = int(sample_rate / fps)  # 每一帧对应的音频样本个数
     def produce_fn():
         total_chunk_num = int(len((speech) - 1) / chunk_stride + 1)
         for i in range(total_chunk_num):
