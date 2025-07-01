@@ -5,7 +5,7 @@ from typing import Tuple, Callable
 from engine.config import PlayerConfig
 from engine.human.avatar.avatar import ModelWrapper
 from engine.human.player.container import AudioContainer, VideoContainer
-from engine.human.player.track import AudioStreamTrack, VideoStreamTrack
+from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
 from engine.utils.pipeline import Pipeline
 from engine.runtime import thread_pool
 from engine.utils.pool import TaskInfo
@@ -22,23 +22,26 @@ class HumanPlayer:
     ):
         self.config = config
         self.model = model
+        self.track_sync = StreamTrackSync(config)
         self.audio_track = AudioStreamTrack(
-            config
+            config,
+            self.track_sync,
         )
         self.video_track = VideoStreamTrack(
-            config
+            config,
+            self.track_sync,
         )
         self.audio_container = AudioContainer(
             config,
             model,
-            self.audio_track,
+            self.track_sync,
             loop
         )
         self.video_container = VideoContainer(
             config,
             model,
             avatar,
-            self.video_track,
+            self.track_sync,
             loop
         )
         self.loop = loop

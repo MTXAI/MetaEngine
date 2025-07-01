@@ -15,7 +15,7 @@ from torch import nn
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import ModelWrapper
-from engine.human.player.track import AudioStreamTrack, VideoStreamTrack
+from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
 from engine.human.utils.data import Data
 
 
@@ -24,7 +24,7 @@ class AudioContainer:
             self,
             config: PlayerConfig,
             model: ModelWrapper,
-            track: AudioStreamTrack,
+            track_sync: StreamTrackSync,
             loop: asyncio.AbstractEventLoop,
     ):
         """
@@ -39,7 +39,7 @@ class AudioContainer:
         self.chunk_size = int(self.sample_rate / self.fps)
         self.batch_size = config.batch_size
         self.model = model
-        self.track = track
+        self.track_sync = track_sync
         self.loop = loop
 
         self._stop_event = threading.Event()
@@ -85,16 +85,17 @@ class AudioContainer:
     def _warmup(self):
         for _ in range(self.config.warmup_iters):
             chunk, state, frame = self._read_frame()
-            asyncio.run_coroutine_threadsafe(self.track.put_frame(frame), self.loop)
+            asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(frame), self.loop)
             self.frame_batch.append(chunk)
 
     def producer(self):
+        self._warmup()
         while not self._stop_event.is_set():
             try:
                 silence = True
                 for i in range(self.batch_size * 2):
                     chunk, state, frame = self._read_frame()
-                    asyncio.run_coroutine_threadsafe(self.track.put_frame(frame), self.loop)
+                    asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(frame), self.loop)
                     self.frame_batch.append(chunk)
                     if state == 1:
                         silence = False
@@ -120,7 +121,7 @@ class VideoContainer:
             config: PlayerConfig,
             model: nn.Module,
             avatar: Tuple,
-            track: VideoStreamTrack,
+            track_sync: StreamTrackSync,
             loop: asyncio.AbstractEventLoop,
     ):
         self.config = config
@@ -128,7 +129,7 @@ class VideoContainer:
         self.fps = config.fps
         self.model = model
         self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = avatar
-        self.track = track
+        self.track_sync = track_sync
         self.loop = loop
 
         self.frame_count = len(self.frame_list_cycle)
@@ -160,7 +161,7 @@ class VideoContainer:
                 frame = self._make_video_frame(frame)
                 self._update_index(1)
 
-                future = asyncio.run_coroutine_threadsafe(self.track.put_frame(frame), self.loop)
+                future = asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(frame), self.loop)
                 future.result()
         else:
             face_img_batch = []
@@ -192,7 +193,7 @@ class VideoContainer:
                 frame = self._make_video_frame(frame)
                 self._update_index(1)
 
-                asyncio.run_coroutine_threadsafe(self.track.put_frame(frame), self.loop)
+                asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(frame), self.loop)
 
 
 if __name__ == '__main__':
@@ -202,25 +203,25 @@ if __name__ == '__main__':
     from engine.utils.pool import TaskInfo
 
     f = '../../../avatars/wav2lip256_avatar1'
-    s_f = '../../../tests/test_datas/asr.wav'
+    s_f = '../../../tests/test_datas/asr_example.wav'
     c_f = '../../../checkpoints/wav2lip.pth'
     model = Wav2LipWrapper(c_f)
 
     # 创建Player实例并启动
     loop = asyncio.new_event_loop()
 
-
+    track_sync = StreamTrackSync(WAV2LIP_PLAYER_CONFIG)
     audio_c = AudioContainer(
         config=WAV2LIP_PLAYER_CONFIG,
         model=model,
-        track=AudioStreamTrack(WAV2LIP_PLAYER_CONFIG),
+        track_sync=track_sync,
         loop=loop,
     )
     video_c = VideoContainer(
         config=WAV2LIP_PLAYER_CONFIG,
         model=model,
         avatar=load_avatar(f),
-        track=VideoStreamTrack(WAV2LIP_PLAYER_CONFIG),
+        track_sync=track_sync,
         loop=loop,
     )
 

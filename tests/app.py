@@ -11,7 +11,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
 
 from engine.config import WAV2LIP_PLAYER_CONFIG
 from engine.human.player.player import HumanPlayer
-from engine.human.player.track import VideoStreamTrack
+from engine.human.player.track import VideoStreamTrack, StreamTrackSync
 from engine.config import WAV2LIP_PLAYER_CONFIG
 from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
 from engine.runtime import thread_pool
@@ -110,8 +110,6 @@ async def websocket_handler(request):
                     preferences += list(filter(lambda x: x.name == "rtx", capabilities.codecs))
                     transceiver = pc.getTransceivers()[1]
                     transceiver.setCodecPreferences(preferences)
-                    for t in pc.getTransceivers():
-                        print(t._offerDirection, t.direction)
 
                     await pc.setRemoteDescription(offer)
 
