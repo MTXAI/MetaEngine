@@ -29,6 +29,13 @@ def load_model(path):
     model = model.to(DEFAULT_RUNTIME_CONFIG.device)
     return model.eval()
 
+def _read_imgs(img_list):
+    frames = []
+    for img_path in tqdm(img_list):
+        frame = cv2.imread(img_path)
+        frames.append(frame)
+    return frames
+
 def load_avatar(avatar_path):
     full_imgs_path = f"{avatar_path}/full_imgs"
     face_imgs_path = f"{avatar_path}/face_imgs"
@@ -38,26 +45,13 @@ def load_avatar(avatar_path):
         coord_list_cycle = pickle.load(f)
     input_img_list = glob.glob(os.path.join(full_imgs_path, '*.[jpJP][pnPN]*[gG]'))
     input_img_list = sorted(input_img_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
-    frame_list_cycle = read_imgs(input_img_list)
+    frame_list_cycle = _read_imgs(input_img_list)
     # self.imagecache = ImgCache(len(self.coord_list_cycle),self.full_imgs_path,1000)
     input_face_list = glob.glob(os.path.join(face_imgs_path, '*.[jpJP][pnPN]*[gG]'))
     input_face_list = sorted(input_face_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
-    face_list_cycle = read_imgs(input_face_list)
+    face_list_cycle = _read_imgs(input_face_list)
 
     return frame_list_cycle ,face_list_cycle ,coord_list_cycle
-
-@torch.no_grad()
-def warm_up(batch_size ,model ,modelres):
-    img_batch = torch.ones(batch_size, 6, modelres, modelres).to(device)
-    mel_batch = torch.ones(batch_size, 1, 80, 16).to(device)
-    model(mel_batch, img_batch)
-
-def read_imgs(img_list):
-    frames = []
-    for img_path in tqdm(img_list):
-        frame = cv2.imread(img_path)
-        frames.append(frame)
-    return frames
 
 class Wav2LipWrapper(ModelWrapper):
     def __init__(self, path):
@@ -92,3 +86,4 @@ class Wav2LipWrapper(ModelWrapper):
         pred_img_batch = self.model(audio_feature_batch, face_img_batch)
         pred_img_batch = pred_img_batch.cpu().numpy().transpose(0, 2, 3, 1) * 255.
         return pred_img_batch
+
