@@ -119,7 +119,7 @@ if __name__ == '__main__':
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                print(f"{i}, {i / counttime}: {frame}, {player.video_track.queue.qsize()}")
+                print(f"{i}, {i / counttime}: {frame}, {player.track_sync.audio_queue.qsize()}")
                 i = 0
                 counttime = 0
 
@@ -133,7 +133,7 @@ if __name__ == '__main__':
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                print(f"{i}, {i / counttime}: {frame}, {player.video_track.queue.qsize()}")
+                print(f"{i}, {i / counttime}: {frame}, {player.track_sync.video_queue.qsize()}")
                 i = 0
                 counttime = 0
 

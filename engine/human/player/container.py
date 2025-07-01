@@ -161,8 +161,7 @@ class VideoContainer:
                 frame = self._make_video_frame(frame)
                 self._update_index(1)
 
-                future = asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(frame), self.loop)
-                future.result()
+                asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(frame), self.loop)
         else:
             face_img_batch = []
             for i in range(self.batch_size):

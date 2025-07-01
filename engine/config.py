@@ -99,7 +99,7 @@ WAV2LIP_PLAYER_CONFIG = PlayerConfig(
         window_right=10,
         timeout=1/fps/4,
         audio_ptime=1/fps,
-        video_ptime=1/fps,
+        video_ptime=1/fps * 2,
         video_clock_rate=90000,
     )
 )

@@ -3,7 +3,7 @@ import fractions
 import logging
 import sys
 import time
-from typing import Union
+from typing import Union, List
 
 from aiortc import MediaStreamTrack
 from av import AudioFrame, VideoFrame
@@ -16,11 +16,16 @@ from engine.config import PlayerConfig
 class StreamTrackSync:
     def __init__(self, config: PlayerConfig):
         self.fps = config.fps
-
         self.audio_queue = asyncio.Queue(self.fps * 10)
         self.video_queue = asyncio.Queue(self.fps * 10)
-        self.audio_frame: AudioFrame = None
+        self.synced_audio_queue = asyncio.Queue(self.fps * 10)
+        self.synced_video_queue = asyncio.Queue(self.fps * 10)
+
+        self.audio_qsize = int(config.video_ptime // config.audio_ptime)
+        assert self.audio_qsize > 0
+        self.audio_frames = asyncio.Queue(self.audio_qsize)
         self.video_frame: VideoFrame = None
+        self._stop_event = asyncio.Event()
 
     async def put_audio_frame(self, frame: AudioFrame):
         await self.audio_queue.put(frame)
@@ -29,15 +34,16 @@ class StreamTrackSync:
         await self.video_queue.put(frame)
 
     async def _sync_frame(self):
-        if self.audio_frame is None:
-            self.audio_frame = await self.audio_queue.get()
+        qsize = self.audio_frames.qsize()
+        for i in range(self.audio_qsize - qsize):
+            audio_frame = await self.audio_queue.get()
+            await self.audio_frames.put(audio_frame)
         if self.video_frame is None:
             self.video_frame = await self.video_queue.get()
 
     async def get_audio_frame(self) -> AudioFrame:
         await self._sync_frame()
-        frame = self.audio_frame
-        self.audio_frame = None
+        frame = await self.audio_frames.get()
         return frame
 
     async def get_video_frame(self) -> VideoFrame:
