@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC 视频播放器</title>
+  <!-- 引入Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入Font Awesome -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+
+  <!-- 配置Tailwind自定义主题 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            secondary: '#7B61FF',
+            accent: '#00C2B8',
+            dark: '#1D2129',
+            light: '#F2F3F5',
+            muted: '#86909C'
+          },
+          fontFamily: {
+            inter: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+
+  <!-- 自定义工具类 -->
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .backdrop-blur-sm {
+        backdrop-filter: blur(4px);
+      }
+      .text-shadow {
+        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .transition-all-300 {
+        transition: all 300ms ease-in-out;
+      }
+    }
+  </style>
+</head>
+<body class="bg-dark font-inter text-light min-h-screen flex flex-col">
+  <!-- 顶部导航栏 -->
+  <header class="bg-dark/80 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-50 transition-all duration-300">
+    <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <i class="fa fa-video-camera text-primary text-2xl"></i>
+        <h1 class="text-xl font-bold">WebRTC 视频播放器</h1>
+      </div>
+      <div class="flex items-center space-x-4">
+        <button id="connectBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg transition-all duration-300 flex items-center">
+          <i class="fa fa-plug mr-2"></i>
+          <span>连接</span>
+        </button>
+        <button id="disconnectBtn" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-all duration-300 flex items-center" disabled>
+          <i class="fa fa-power-off mr-2"></i>
+          <span>断开</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主内容区 -->
+  <main class="flex-grow container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+      <!-- 状态指示器 -->
+      <div id="status" class="mb-6 p-4 rounded-lg bg-gray-800 border border-gray-700 flex items-center">
+        <i id="statusIcon" class="fa fa-circle-o text-yellow-500 mr-3 text-xl"></i>
+        <span id="statusText">等待连接...</span>
+      </div>
+
+      <!-- 视频容器 -->
+      <div class="relative rounded-xl overflow-hidden shadow-2xl bg-black/50 border border-gray-800 aspect-video mb-6">
+        <!-- 视频播放器 -->
+        <video
+          id="videoPlayer"
+          class="w-full h-full object-contain"
+          autoplay
+          playsinline
+          muted
+        ></video>
+
+        <!-- 视频加载指示器 -->
+        <div id="loadingIndicator" class="absolute inset-0 flex items-center justify-center bg-black/50">
+          <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-primary border-opacity-70"></div>
+        </div>
+
+        <!-- 视频控制覆盖层 -->
+        <div id="videoControls" class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4">
+          <div class="flex justify-between items-center">
+            <div class="text-white text-shadow">
+              <h2 id="videoTitle" class="text-xl font-semibold">实时视频流</h2>
+              <p id="videoStats" class="text-sm text-gray-300">--</p>
+            </div>
+          </div>
+
+          <div class="flex justify-center space-x-4">
+            <button id="playPauseBtn" class="bg-white/20 hover:bg-white/30 text-white w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-300">
+              <i class="fa fa-play"></i>
+            </button>
+            <button id="muteBtn" class="bg-white/20 hover:bg-white/30 text-white w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-300">
+              <i class="fa fa-volume-up"></i>
+            </button>
+            <button id="fullscreenBtn" class="bg-white/20 hover:bg-white/30 text-white w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-300">
+              <i class="fa fa-expand"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 信息面板 -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+          <div class="flex items-center mb-2">
+            <i class="fa fa-signal text-primary mr-2"></i>
+            <h3 class="font-semibold">连接状态</h3>
+          </div>
+          <p id="connectionStatus" class="text-sm text-gray-400">未连接</p>
+        </div>
+
+        <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+          <div class="flex items-center mb-2">
+            <i class="fa fa-clock-o text-accent mr-2"></i>
+            <h3 class="font-semibold">播放时间</h3>
+          </div>
+          <p id="playTime" class="text-sm text-gray-400">00:00:00</p>
+        </div>
+
+        <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+          <div class="flex items-center mb-2">
+            <i class="fa fa-info-circle text-secondary mr-2"></i>
+            <h3 class="font-semibold">视频信息</h3>
+          </div>
+          <p id="videoInfo" class="text-sm text-gray-400">--</p>
+        </div>
+      </div>
+
+      <!-- 日志面板 -->
+      <div class="bg-gray-900/70 border border-gray-800 rounded-lg overflow-hidden">
+        <div class="px-4 py-2 bg-gray-800/50 border-b border-gray-700 flex justify-between items-center">
+          <h3 class="font-semibold">系统日志</h3>
+          <button id="clearLogBtn" class="text-sm text-gray-400 hover:text-white transition-colors">
+            <i class="fa fa-trash-o mr-1"></i> 清空
+          </button>
+        </div>
+        <div id="logContainer" class="p-4 max-h-40 overflow-y-auto text-sm text-gray-300 space-y-2">
+          <p class="log-entry"><span class="text-gray-500">[系统]</span> 等待连接到WebRTC服务器...</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 页脚 -->
+  <footer class="bg-dark/80 backdrop-blur-sm border-t border-gray-800 py-4">
+    <div class="container mx-auto px-4 text-center text-gray-500 text-sm">
+      <p>WebRTC 视频播放器 &copy; 2025</p>
+    </div>
+  </footer>
+
+  <!-- JavaScript 代码 -->
+  <script>
+    // 全局变量
+    const videoPlayer = document.getElementById('videoPlayer');
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const statusIcon = document.getElementById('statusIcon');
+    const statusText = document.getElementById('statusText');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const playTime = document.getElementById('playTime');
+    const videoInfo = document.getElementById('videoInfo');
+    const logContainer = document.getElementById('logContainer');
+    const clearLogBtn = document.getElementById('clearLogBtn');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const videoControls = document.getElementById('videoControls');
+    const videoStats = document.getElementById('videoStats');
+
+    // WebRTC 相关变量
+    let pc = null;
+    let signalingSocket = null;
+    let isPlaying = false;
+    let startTime = null;
+    let playTimer = null;
+    let statsTimer = null;
+
+    // 日志函数
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const logEntry = document.createElement('p');
+      logEntry.className = 'log-entry';
+
+      let typeClass = 'text-gray-500';
+      let typeLabel = '[信息]';
+
+      if (type === 'error') {
+        typeClass = 'text-red-400';
+        typeLabel = '[错误]';
+      } else if (type === 'success') {
+        typeClass = 'text-green-400';
+        typeLabel = '[成功]';
+      } else if (type === 'warning') {
+        typeClass = 'text-yellow-400';
+        typeLabel = '[警告]';
+      }
+
+      logEntry.innerHTML = `<span class="${typeClass}">${timestamp} ${typeLabel}</span> ${message}`;
+      logContainer.appendChild(logEntry);
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    // 更新播放时间
+    function updatePlayTime() {
+      if (!startTime) return;
+
+      const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+      const hours = Math.floor(elapsedSeconds / 3600).toString().padStart(2, '0');
+      const minutes = Math.floor((elapsedSeconds % 3600) / 60).toString().padStart(2, '0');
+      const seconds = (elapsedSeconds % 60).toString().padStart(2, '0');
+
+      playTime.textContent = `${hours}:${minutes}:${seconds}`;
+    }
+
+    // 更新视频统计信息
+    async function updateVideoStats() {
+      if (!pc || !videoPlayer.srcObject) return;
+
+      try {
+        const stats = await pc.getStats(null);
+        let bitrate = 'N/A';
+        let framerate = 'N/A';
+
+        stats.forEach(report => {
+          if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
+            // 计算比特率 (bps)
+            if (report.bytesReceived && report.lastPacketReceivedTimestamp) {
+              const bytes = report.bytesReceived;
+              const timestamp = report.lastPacketReceivedTimestamp;
+
+              // 假设上次统计是1秒前
+              bitrate = Math.round((bytes * 8) / 1000) + ' kbps';
+            }
+
+            // 计算帧率
+            if (report.framesPerSecond) {
+              framerate = Math.round(report.framesPerSecond) + ' fps';
+            }
+          }
+        });
+
+        videoStats.textContent = `${bitrate}, ${framerate}`;
+        videoInfo.textContent = `${videoPlayer.videoWidth}x${videoPlayer.videoHeight}, ${framerate}`;
+      } catch (error) {
+        log(`获取统计信息失败: ${error.message}`, 'warning');
+      }
+    }
+
+    // 连接到WebRTC服务器
+    async function connect() {
+      try {
+        // 禁用连接按钮
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+
+        // 更新状态
+        statusIcon.className = 'fa fa-circle-o text-yellow-500 mr-3 text-xl';
+        statusText.textContent = '正在连接...';
+        connectionStatus.textContent = '连接中...';
+        log('正在连接到WebRTC服务器...');
+
+        // 创建新的RTCPeerConnection
+        pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        });
+
+
+        // 明确添加transceivers并设置方向为recvonly
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+
+
+        // // 处理ICE候选
+        // pc.onicecandidate = (event) => {
+        //   if (event.candidate) {
+        //     log('发送ICE候选到服务器');
+        //     signalingSocket.send(JSON.stringify({
+        //       type: 'candidate',
+        //       candidate: event.candidate
+        //     }));
+        //   }
+        // };
+
+        // 处理远程流
+        pc.ontrack = (event) => {
+          log('接收到远程媒体流');
+          videoPlayer.srcObject = event.streams[0];
+
+          // 隐藏加载指示器
+          loadingIndicator.classList.add('opacity-0');
+          setTimeout(() => {
+            loadingIndicator.classList.add('hidden');
+          }, 300);
+
+          // 更新状态
+          statusIcon.className = 'fa fa-circle text-green-500 mr-3 text-xl';
+          statusText.textContent = '已连接';
+          connectionStatus.textContent = '已连接';
+          log('成功建立WebRTC连接', 'success');
+
+          // 开始播放
+          videoPlayer.play().then(() => {
+            isPlaying = true;
+            playPauseBtn.innerHTML = '<i class="fa fa-pause"></i>';
+            startTime = Date.now();
+            playTimer = setInterval(updatePlayTime, 1000);
+            statsTimer = setInterval(updateVideoStats, 1000);
+          }).catch(error => {
+            log(`播放视频失败: ${error.message}`, 'error');
+          });
+        };
+
+        // 连接状态变化
+        pc.onconnectionstatechange = () => {
+          log(`连接状态变化: ${pc.connectionState}`);
+          connectionStatus.textContent = pc.connectionState;
+
+          if (pc.connectionState === 'disconnected' ||
+              pc.connectionState === 'failed' ||
+              pc.connectionState === 'closed') {
+            disconnect();
+          }
+        };
+
+        // 连接到信令服务器
+        signalingSocket = new WebSocket('ws://localhost:8080/ws');
+
+        // 创建offer并等待ICE收集完成
+        signalingSocket.onopen = () => {
+            log('已连接到信令服务器');
+
+            // 创建offer
+            pc.createOffer().then(offer => {
+                return pc.setLocalDescription(offer);
+            }).then(() => {
+                // 等待ICE收集完成
+                return new Promise(resolve => {
+                    if (pc.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        const checkState = () => {
+                            if (pc.iceGatheringState === 'complete') {
+                                pc.removeEventListener('icegatheringstatechange', checkState);
+                                resolve();
+                            }
+                        };
+                        pc.addEventListener('icegatheringstatechange', checkState);
+                    }
+                });
+            }).then(() => {
+                // 发送offer到服务器
+                log('发送offer到服务器');
+                signalingSocket.send(JSON.stringify({
+                    type: 'offer',
+                    sdp: pc.localDescription.sdp
+                }));
+            }).catch(error => {
+                log(`创建offer失败: ${error.message}`, 'error');
+                disconnect();
+            });
+        };
+
+        signalingSocket.onmessage = (event) => {
+          const message = JSON.parse(event.data);
+          log(`收到消息: ${message.type}`);
+
+          if (message.type === 'answer') {
+            // 设置远程描述
+            pc.setRemoteDescription(new RTCSessionDescription({
+              type: 'answer',
+              sdp: message.sdp
+            })).catch(error => {
+              log(`设置远程描述失败: ${error.message}`, 'error');
+              disconnect();
+            });
+          }
+        };
+
+        signalingSocket.onclose = () => {
+          log('与信令服务器的连接已关闭', 'warning');
+          disconnect();
+        };
+
+        signalingSocket.onerror = (error) => {
+          log(`信令服务器连接错误: ${error.message}`, 'error');
+          disconnect();
+        };
+
+      } catch (error) {
+        log(`连接过程中发生错误: ${error.message}`, 'error');
+        disconnect();
+      }
+    }
+
+
+    // 断开连接
+    function disconnect() {
+      // 清除计时器
+      if (playTimer) {
+        clearInterval(playTimer);
+        playTimer = null;
+      }
+
+      if (statsTimer) {
+        clearInterval(statsTimer);
+        statsTimer = null;
+      }
+
+      // 重置播放状态
+      isPlaying = false;
+      playPauseBtn.innerHTML = '<i class="fa fa-play"></i>';
+      startTime = null;
+      playTime.textContent = '00:00:00';
+
+      // 隐藏视频控制
+      videoControls.classList.remove('opacity-100');
+      videoControls.classList.add('opacity-0');
+
+      // 重置视频播放器
+      if (videoPlayer.srcObject) {
+        videoPlayer.srcObject.getTracks().forEach(track => track.stop());
+        videoPlayer.srcObject = null;
+      }
+
+      // 关闭RTCPeerConnection
+      if (pc) {
+        pc.close();
+        pc = null;
+      }
+
+      // 关闭信令连接
+      if (signalingSocket) {
+        signalingSocket.close();
+        signalingSocket = null;
+      }
+
+      // 显示加载指示器
+      loadingIndicator.classList.remove('hidden');
+      loadingIndicator.classList.remove('opacity-0');
+
+      // 更新状态
+      statusIcon.className = 'fa fa-circle-o text-yellow-500 mr-3 text-xl';
+      statusText.textContent = '等待连接...';
+      connectionStatus.textContent = '未连接';
+      videoInfo.textContent = '--';
+      videoStats.textContent = '--';
+
+      // 启用连接按钮
+      connectBtn.disabled = false;
+      disconnectBtn.disabled = true;
+
+      log('已断开连接');
+    }
+
+    // 播放/暂停视频
+    function togglePlayPause() {
+      if (!videoPlayer.srcObject) return;
+
+      if (isPlaying) {
+        videoPlayer.pause();
+        isPlaying = false;
+        playPauseBtn.innerHTML = '<i class="fa fa-play"></i>';
+        if (startTime) {
+          clearInterval(playTimer);
+        }
+      } else {
+        videoPlayer.play().then(() => {
+          isPlaying = true;
+          playPauseBtn.innerHTML = '<i class="fa fa-pause"></i>';
+          if (!startTime) {
+            startTime = Date.now();
+          }
+          playTimer = setInterval(updatePlayTime, 1000);
+        }).catch(error => {
+          log(`播放视频失败: ${error.message}`, 'error');
+        });
+      }
+    }
+
+    // 静音/取消静音
+    function toggleMute() {
+      videoPlayer.muted = !videoPlayer.muted;
+      muteBtn.innerHTML = videoPlayer.muted ?
+        '<i class="fa fa-volume-off"></i>' :
+        '<i class="fa fa-volume-up"></i>';
+    }
+
+    // 全屏/退出全屏
+    function toggleFullscreen() {
+      const videoContainer = videoPlayer.parentElement;
+
+      if (!document.fullscreenElement) {
+        if (videoContainer.requestFullscreen) {
+          videoContainer.requestFullscreen();
+        } else if (videoContainer.webkitRequestFullscreen) { /* Safari */
+          videoContainer.webkitRequestFullscreen();
+        } else if (videoContainer.msRequestFullscreen) { /* IE11 */
+          videoContainer.msRequestFullscreen();
+        }
+        fullscreenBtn.innerHTML = '<i class="fa fa-compress"></i>';
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) { /* Safari */
+          document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) { /* IE11 */
+          document.msExitFullscreen();
+        }
+        fullscreenBtn.innerHTML = '<i class="fa fa-expand"></i>';
+      }
+    }
+
+    // 清空日志
+    function clearLog() {
+      logContainer.innerHTML = '';
+      log('日志已清空');
+    }
+
+    // 监听键盘事件
+    function handleKeydown(event) {
+      if (document.activeElement.tagName === 'INPUT') return;
+
+      switch (event.key.toLowerCase()) {
+        case ' ':
+          togglePlayPause();
+          event.preventDefault();
+          break;
+        case 'm':
+          toggleMute();
+          event.preventDefault();
+          break;
+        case 'f':
+          toggleFullscreen();
+          event.preventDefault();
+          break;
+        case 'c':
+          if (event.ctrlKey) {
+            if (pc && pc.connectionState === 'connected') {
+              disconnect();
+            } else {
+              connect();
+            }
+            event.preventDefault();
+          }
+          break;
+      }
+    }
+
+    // 监听全屏状态变化
+    function handleFullscreenChange() {
+      fullscreenBtn.innerHTML = document.fullscreenElement ?
+        '<i class="fa fa-compress"></i>' :
+        '<i class="fa fa-expand"></i>';
+    }
+
+    // 视频元数据加载完成
+    function handleLoadedMetadata() {
+      log(`视频加载完成: ${videoPlayer.videoWidth}x${videoPlayer.videoHeight}`);
+      videoInfo.textContent = `${videoPlayer.videoWidth}x${videoPlayer.videoHeight}, -- fps`;
+    }
+
+    // 视频播放错误
+    function handleError() {
+      log(`视频播放错误: ${videoPlayer.error.message}`, 'error');
+      statusIcon.className = 'fa fa-circle text-red-500 mr-3 text-xl';
+      statusText.textContent = '播放错误';
+    }
+
+    // 视频播放结束
+    function handleEnded() {
+      log('视频播放结束');
+      isPlaying = false;
+      playPauseBtn.innerHTML = '<i class="fa fa-play"></i>';
+      if (playTimer) {
+        clearInterval(playTimer);
+        playTimer = null;
+      }
+    }
+
+    // 初始化事件监听器
+    function initEventListeners() {
+      connectBtn.addEventListener('click', connect);
+      disconnectBtn.addEventListener('click', disconnect);
+      playPauseBtn.addEventListener('click', togglePlayPause);
+      muteBtn.addEventListener('click', toggleMute);
+      fullscreenBtn.addEventListener('click', toggleFullscreen);
+      clearLogBtn.addEventListener('click', clearLog);
+      document.addEventListener('keydown', handleKeydown);
+      document.addEventListener('fullscreenchange', handleFullscreenChange);
+      document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+      videoPlayer.addEventListener('loadedmetadata', handleLoadedMetadata);
+      videoPlayer.addEventListener('error', handleError);
+      videoPlayer.addEventListener('ended', handleEnded);
+
+      // 鼠标移动显示控制条
+      videoPlayer.addEventListener('mousemove', () => {
+        if (videoPlayer.srcObject) {
+          videoControls.classList.remove('opacity-0');
+          videoControls.classList.add('opacity-100');
+
+          clearTimeout(videoControls._timeout);
+          videoControls._timeout = setTimeout(() => {
+            videoControls.classList.remove('opacity-100');
+            videoControls.classList.add('opacity-0');
+          }, 3000);
+        }
+      });
+    }
+
+    // 初始化应用
+    function init() {
+      log('WebRTC视频播放器已初始化');
+      initEventListeners();
+    }
+
+    // 页面加载完成后初始化
+    window.addEventListener('load', init);
+  </script>
+</body>
+</html>

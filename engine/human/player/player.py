@@ -52,9 +52,12 @@ class HumanPlayer:
                 consumer=self.video_container.consumer
             )
         ]
+        self._start = False
 
 
     def start(self):
+        if self._start:
+            return
         for i, pipe in enumerate(self.pipelines):
             thread_pool.submit(
                 pipe.produce_worker,
@@ -68,6 +71,7 @@ class HumanPlayer:
                     name=f"{i}_consume_worker"
                 )
             )
+        self._start = True
 
 
     def shutdown(self):
@@ -107,12 +111,12 @@ if __name__ == '__main__':
         counttime = 0
         t = time.perf_counter()
         while True:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.01)
             frame = await player.audio_track.recv()
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                print(f"{i}, {i / counttime}: {frame}")
+                print(f"{i}, {i / counttime}: {frame}, {player.video_track.queue.qsize()}")
                 i = 0
                 counttime = 0
 
@@ -121,12 +125,12 @@ if __name__ == '__main__':
         counttime = 0
         t = time.perf_counter()
         while True:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.01)
             frame = await player.video_track.recv()
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                print(f"{i}, {i / counttime}: {frame}")
+                print(f"{i}, {i / counttime}: {frame}, {player.video_track.queue.qsize()}")
                 i = 0
                 counttime = 0
 

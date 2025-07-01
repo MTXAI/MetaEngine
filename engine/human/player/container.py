@@ -181,11 +181,8 @@ class VideoContainer:
             audio_feature_batch = torch.FloatTensor(audio_feature_batch).to(DEFAULT_RUNTIME_CONFIG.device)
 
             try:
-                start_time = time.time()
                 with torch.no_grad():
                     pred_img_batch = self.model.inference(audio_feature_batch, face_img_batch, self.config)
-                end_time = time.time()
-                print(f"inference time: {end_time - start_time}, {DEFAULT_RUNTIME_CONFIG.device}, {pred_img_batch.shape}")
             except Exception as e:
                 print(f"Inference error: {e}")
                 traceback.print_exc()
