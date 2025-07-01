@@ -29,7 +29,6 @@ class Player:
             model: ModelWrapper,
             avatar: Tuple,
             thread_pool: ThreadPool,
-            event_loop: asyncio.AbstractEventLoop,
             # video_track: ,
             # audio_track: ,
     ):
@@ -43,6 +42,7 @@ class Player:
         self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = avatar
         self.model = model
         self.stop_event = threading.Event()
+        self.event_loop = asyncio.get_event_loop()
 
         # 设置队列最大大小，防止无限阻塞
         self.input_queue = Queue()
@@ -54,7 +54,6 @@ class Player:
         self.frame_count = len(self.frame_list_cycle)
         self.frame_index = 0
         self.thread_pool = thread_pool
-        self.event_loop = event_loop
         self.monitor_thread = None
         self.monitor_running = False
         self.debug = False
@@ -174,16 +173,17 @@ class Player:
                             timeout=0.1
                         )
                         self.update_index(1)
-                count += self.batch_size
-                counttime += (time.perf_counter() - t)
-                # _totalframe += 1
-                if count >= 100:
-                    print(f"------actual avg infer fps:{count / counttime:.4f}")
-                    count = 0
-                    counttime = 0
+                if self.debug:
+                    count += self.batch_size
+                    counttime += (time.perf_counter() - t)
+                    # _totalframe += 1
+                    if count >= 100:
+                        print(f"------actual avg infer fps:{count / counttime:.4f}")
+                        count = 0
+                        counttime = 0
 
-                    # 每批推理完成后打印队列状态
-                    self._print_queue_status("After inference batch")
+                        # 每批推理完成后打印队列状态
+                        self._print_queue_status("After inference batch")
             except Exception as e:
                 print(f"Video inference error: {e}")
                 traceback.print_exc()
@@ -277,6 +277,8 @@ class Player:
         self._print_queue_status("Player stopped, queues cleared")
 
     def _print_queue_status(self, message: str = "Queue status"):
+        if not self.debug:
+            return
         """打印当前所有队列的大小"""
         input_size = self.input_queue.qsize()
         frame_size = self.frame_queue.qsize()
@@ -309,7 +311,7 @@ if __name__ == '__main__':
     model = Wav2LipWrapper(c_f)
 
     # 创建Player实例并启动
-    player = Player(WAV2LIP_PLAYER_CONFIG, model, load_avatar(f), thread_pool, asyncio.get_event_loop())
+    player = Player(WAV2LIP_PLAYER_CONFIG, model, load_avatar(f), thread_pool)
     player.start()
 
     # 设置音频数据生产者

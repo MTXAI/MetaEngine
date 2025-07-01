@@ -712,5 +712,5 @@ if __name__ == '__main__':
             break
     # pipeline.shutdown()
     # player.shutdown()
-    # thread_pool.shutdown()
+    thread_pool.shutdown()
 
