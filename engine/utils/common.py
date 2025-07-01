@@ -53,10 +53,7 @@ class EasyDict(dict):
 def get_device_and_start_method() -> Tuple[str, str]:
     device = "cuda" if torch.cuda.is_available() else ("mps" if (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()) else "cpu")
     if device == 'cuda':
-        if mp.get_platform() == 'win32' or mp.get_platform() == 'darwin':
-            start_method = 'spawn'
-        else:
-            start_method = 'fork'
+        start_method = 'spawn'
     elif device == 'mps':
         start_method = 'spawn'
     else:
