@@ -48,11 +48,11 @@ class HumanPlayer:
         self.pipelines = [
             Pipeline(
                 producer=audio_producer,
-                consumer=self.audio_container.consumer
+                consumer=self.audio_container.consumer,
             ),
             Pipeline(
                 producer=self.audio_container.producer,
-                consumer=self.video_container.consumer
+                consumer=self.video_container.consumer,
             )
         ]
         self._start = False
@@ -87,7 +87,7 @@ if __name__ == '__main__':
 
     from engine.config import WAV2LIP_PLAYER_CONFIG
     from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
-    from engine.human.voice.asr import soundfile_producer
+    from engine.human.voice import soundfile_producer
 
     f = '../../../avatars/wav2lip256_avatar1'
     s_f = '../../../tests/test_datas/asr.wav'

@@ -9,10 +9,10 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
 from engine.config import WAV2LIP_PLAYER_CONFIG
 from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
 from engine.human.player.player import HumanPlayer
-from engine.human.voice.asr import soundfile_producer
+from engine.human.voice import soundfile_producer
 
-f = '../avatars/wav2lip256_avatar1'
-s_f = '../tests/test_datas/asr.wav'
+a_f = '../avatars/wav2lip256_avatar1'
+s_f = '../tests/test_datas/asr_example.wav'
 c_f = '../checkpoints/wav2lip.pth'
 
 model = Wav2LipWrapper(c_f)
@@ -23,7 +23,7 @@ loop = asyncio.new_event_loop()
 player = HumanPlayer(
     config=WAV2LIP_PLAYER_CONFIG,
     model=model,
-    avatar=load_avatar(f),
+    avatar=load_avatar(a_f),
     loop=loop,
     audio_producer=soundfile_producer(s_f, fps=10)
 )
@@ -76,8 +76,7 @@ async def websocket_handler(request):
         async for msg in ws:
             msg: WSMessage
             if msg.type == web.WSMsgType.TEXT:
-                data = json.loads(msg.data)
-
+                data = msg.json()
                 if data["type"] == "offer":
                     # 处理客户端的 offer
                     offer = RTCSessionDescription(sdp=data["sdp"], type="offer")
@@ -116,13 +115,6 @@ async def websocket_handler(request):
                     })
 
                     logging.info(f"向客户端 {client_id} 发送 answer")
-
-                # elif data["type"] == "candidate":
-                #     # 处理客户端的 ICE 候选
-                #     candidate = data["candidate"]
-                #     if candidate:
-                #         await pc.addIceCandidate(candidate)
-                #         logging.info(f"从客户端 {client_id} 收到 ICE 候选")
             elif msg.type == web.WSMsgType.ERROR:
                 logging.error(f"WebSocket 错误: {ws.exception()}")
 

@@ -12,25 +12,39 @@ from engine.config import PlayerConfig
 
 
 class StreamTrackSync:
-    def __init__(self, config: PlayerConfig):
+    def __init__(self, config: PlayerConfig, prefer='audio'):
         self.fps = config.fps
         self.audio_queue = asyncio.Queue(self.fps * 10)
         self.video_queue = asyncio.Queue(self.fps * 10)
 
+        self.prefer = prefer
+        self.sync_queue = asyncio.Queue()
+
     async def put_audio_frame(self, frame: AudioFrame):
+        if self.prefer == 'video':
+            video_frame = await self.video_queue.get()
+            await self.sync_queue.put(video_frame)
         await self.audio_queue.put(frame)
 
     async def put_video_frame(self, frame: VideoFrame):
+        if self.prefer == 'audio':
+            audio_frame = await self.audio_queue.get()
+            await self.sync_queue.put(audio_frame)
         await self.video_queue.put(frame)
 
     async def get_audio_frame(self) -> AudioFrame:
-        frame = await self.audio_queue.get()
+        if self.prefer == 'audio':
+            frame = await self.sync_queue.get()
+        else:
+            frame = await self.audio_queue.get()
         return frame
 
     async def get_video_frame(self) -> VideoFrame:
-        frame = await self.video_queue.get()
+        if self.prefer == 'video':
+            frame = await self.sync_queue.get()
+        else:
+            frame = await self.video_queue.get()
         return frame
-
 
 class AudioStreamTrack(MediaStreamTrack):
     kind = "audio"

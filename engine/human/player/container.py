@@ -42,8 +42,8 @@ class AudioContainer:
 
         self._stop_event = threading.Event()
 
-        self.queue = queue.Queue()
-        self.frame_queue = queue.Queue()
+        self.queue = queue.Queue(self.fps * 10)
+        self.frame_queue = queue.Queue(self.fps * 10)
         self.frame_batch = []
         self.frame_fragment = None
 
@@ -231,7 +231,7 @@ if __name__ == '__main__':
         loop=loop,
     )
 
-    from engine.human.voice.asr import soundfile_producer
+    from engine.human.voice import soundfile_producer
     from engine.utils.pipeline import Pipeline
 
     pipeline_audio = Pipeline(

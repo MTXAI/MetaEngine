@@ -1,21 +1,27 @@
 import asyncio
 import queue
 import threading
+import traceback
 from queue import Queue
-from typing import Callable, Tuple, Union
+from typing import Callable, Tuple, Union, List
 
 from engine.human.utils.data import Data
 
 
 class PipelineCallback:
-    def on_start(self):
-        pass
-
     def on_error(self, e: Exception):
         pass
 
-    def on_stop(self):
+    def on_stop(self, module: str=""):
         pass
+
+
+class TODOPipelineCallback(PipelineCallback):
+    def on_error(self, e: Exception):
+        print('error', e)
+
+    def on_stop(self, module: str=""):
+        print('stop', module)
 
 
 class Pipeline:
@@ -24,12 +30,22 @@ class Pipeline:
             producer: Callable,
             consumer: Callable,
             generator: Callable=None,
+            callbacks: Union[List[PipelineCallback], Tuple[PipelineCallback], PipelineCallback]=None,
             timeout: float=0.1,
             **kwargs
         ):
+        self.name = kwargs.pop('name', 'Unknown')
         self.producer = producer
         self.consumer = consumer
         self.generator = generator
+        if callbacks is not None:
+            if isinstance(callbacks, PipelineCallback):
+                self.callbacks = [callbacks]
+            else:
+                self.callbacks = list(callbacks)
+        else:
+            self.callbacks = callbacks
+
         self.out_queue = Queue()
         self.queue = Queue()
         self.timeout = timeout
@@ -38,21 +54,34 @@ class Pipeline:
         self._consume_event = threading.Event()
 
     def produce_worker(self):
-        for data in self.producer():
-            if self._stop_event.is_set():
-                break
-            self.queue.put(data)
+        try:
+            for data in self.producer():
+                if self._stop_event.is_set():
+                    break
+                self.queue.put(data)
+        except Exception as e:
+            for c in self.callbacks:
+                c.on_error(e)
+            traceback.print_exc()
         self._produce_event.set()
+        for c in self.callbacks:
+            c.on_stop(f"{self.name}.producer")
 
     def consume_worker(self):
         while not self._produce_event.is_set() or not self.queue.empty():
             try:
                 data = self.queue.get(timeout=self.timeout)
+                data = self.consumer(data)
+                self.out_queue.put(data)
             except queue.Empty:
                 continue
-            data = self.consumer(data)
-            self.out_queue.put(data)
+            except Exception as e:
+                for c in self.callbacks:
+                    c.on_error(e)
+                traceback.print_exc()
         self._consume_event.set()
+        for c in self.callbacks:
+            c.on_stop(f"{self.name}.consumer")
 
     def wait_for_results(self):
         while not self._consume_event.is_set() or not self.out_queue.empty():
@@ -65,10 +94,15 @@ class Pipeline:
                     yield data
             except queue.Empty:
                 continue
+            except Exception as e:
+                for c in self.callbacks:
+                    c.on_error(e)
+                traceback.print_exc()
 
     def shutdown(self):
         self._stop_event.set()
-
+        for c in self.callbacks:
+            c.on_stop(f"{self.name}")
 
 class AsyncPipeline:
     def __init__(
@@ -77,12 +111,22 @@ class AsyncPipeline:
             consumer: Callable,
             to_producer: bool = False,
             generator: Callable=None,
+            callbacks: Union[List[PipelineCallback], Tuple[PipelineCallback], PipelineCallback] = None,
             timeout: float=0.1,
             **kwargs
         ):
+        self.name = kwargs.pop('name', 'Unknown')
         self.producer = producer
         self.consumer = consumer
         self.generator = generator
+        if callbacks is not None:
+            if isinstance(callbacks, PipelineCallback):
+                self.callbacks = [callbacks]
+            else:
+                self.callbacks = list(callbacks)
+        else:
+            self.callbacks = []
+
         self.queue = asyncio.Queue()
         self.to_producer = to_producer
         self.output_queue = asyncio.Queue()
@@ -90,23 +134,37 @@ class AsyncPipeline:
         self._stop_event = asyncio.Event()
 
     async def produce_worker(self):
-        async for data in self.producer():
-            if self._stop_event.is_set():
-                break
-            await self.queue.put(data)
+        try:
+            async for data in self.producer():
+                if self._stop_event.is_set():
+                    break
+                await self.queue.put(data)
+        except Exception as e:
+            for c in self.callbacks:
+                c.on_error(e)
+            traceback.print_exc()
+        for c in self.callbacks:
+            c.on_stop(f"{self.name}.producer")
 
     async def consume_worker(self):
         while not self._stop_event.is_set() or not self.queue.empty():
             try:
                 data = await asyncio.wait_for(self.queue.get(), timeout=self.timeout)
+                if asyncio.iscoroutinefunction(self.consumer):
+                    data = await self.consumer(data)
+                else:
+                    data = self.consumer(data)
+
+                if self.to_producer:
+                    await self.output_queue.put(data)
             except asyncio.TimeoutError:
                 continue
-            if asyncio.iscoroutinefunction(self.consumer):
-                data = await self.consumer(data)
-            else:
-                data = self.consumer(data)
-            if self.to_producer:
-                await self.output_queue.put(data)
+            except Exception as e:
+                for c in self.callbacks:
+                    c.on_error(e)
+                traceback.print_exc()
+        for c in self.callbacks:
+            c.on_stop(f"{self.name}.consumer")
 
     async def wait_for_results(self):
         if not self.to_producer:
@@ -115,16 +173,22 @@ class AsyncPipeline:
         while not self._stop_event.is_set() or not self.output_queue.empty():
             try:
                 data = await asyncio.wait_for(self.output_queue.get(), timeout=self.timeout)
+                if self.generator is not None:
+                    for _data in self.generator(data):
+                        yield _data
+                else:
+                    yield data
             except asyncio.TimeoutError:
                 continue
-            if self.generator is not None:
-                for _data in self.generator(data):
-                    yield _data
-            else:
-                yield data
+            except Exception as e:
+                for c in self.callbacks:
+                    c.on_error(e)
+                traceback.print_exc()
 
     def shutdown(self):
         self._stop_event.set()
+        for c in self.callbacks:
+            c.on_stop(f"{self.name}")
 
 if __name__ == '__main__':
     from engine.utils.pool import TaskCallback, ThreadPool, TaskInfo, CoroutinePool
