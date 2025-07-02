@@ -57,6 +57,9 @@ class HumanPlayer:
         ]
         self._start = False
 
+    def flush(self):
+        self.audio_container.flush()
+        self.track_sync.flush()
 
     def start(self):
         if self._start:
@@ -75,7 +78,6 @@ class HumanPlayer:
                 )
             )
         self._start = True
-
 
     def shutdown(self):
         self.audio_container.shutdown()

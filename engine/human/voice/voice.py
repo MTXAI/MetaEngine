@@ -1,27 +1,28 @@
-from os import PathLike
-from typing import AsyncGenerator, Union
-
-import soundfile
-
-from engine.human.utils.data import Data
+from torch import nn
 
 
-def soundfile_producer(f: Union[PathLike, str], fps: int):
-    speech, sample_rate = soundfile.read(f)
-    chunk_stride = int(sample_rate / fps)  # 每一帧对应的音频样本个数
-    def produce_fn():
-        total_chunk_num = int(len((speech) - 1) / chunk_stride + 1)
-        for i in range(total_chunk_num):
-            speech_chunk = speech[i * chunk_stride:(i + 1) * chunk_stride]
-            is_final = i == total_chunk_num - 1
-            yield Data(
-                data=speech_chunk,
-                final=is_final,
-            )
-    return produce_fn
-
-
-def sounddevice_producer():
-    async def produce_fn() -> AsyncGenerator:
+class TTSModelWrapper(nn.Module):
+    def flush(self):
+        """
+        清理本地文本和音频缓存
+        :return:
+        """
         pass
 
+    def streaming_inference(self, text_block, stream=False):
+        """
+        接收 text streaming, 先在本地组装文本块, 再输出音频
+        :param text_block: 流式输入的文本块
+        :param stream: 是否流式输出音频
+        :return:
+        """
+        pass
+
+    def inference(self, text, stream=False):
+        """
+        接收 text, 输出音频
+        :param text: 文本
+        :param stream: 是否流式输出音频
+        :return:
+        """
+        pass

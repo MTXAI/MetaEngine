@@ -42,8 +42,14 @@ class AudioContainer:
 
         self._stop_event = threading.Event()
 
-        self.queue = queue.Queue(self.fps * 10)
-        self.frame_queue = queue.Queue(self.fps * 10)
+        self.queue = queue.Queue(self.fps * 3)
+        self.frame_queue = queue.Queue(self.fps * 3)
+        self.frame_batch = []
+        self.frame_fragment = None
+
+    def flush(self):
+        self.queue.queue.clear()
+        self.frame_queue.queue.clear()
         self.frame_batch = []
         self.frame_fragment = None
 
