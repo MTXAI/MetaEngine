@@ -80,7 +80,8 @@ class PlayerConfig(EasyConfig):
     batch_size: int
     warmup_iters: int
     timeout: float
-    ptime: float
+    audio_ptime: float
+    video_ptime: float
     video_clock_rate: int
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -93,7 +94,8 @@ WAV2LIP_PLAYER_CONFIG = PlayerConfig(
         batch_size=16,
         warmup_iters=16,
         timeout=1/fps/4,
-        ptime=1/fps,
+        audio_ptime=1/fps,
+        video_ptime=1/fps,
         video_clock_rate=90000,
     )
 )
