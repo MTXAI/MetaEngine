@@ -19,8 +19,6 @@ class StreamTrackSync:
         self.synced_audio_queue = asyncio.Queue(self.fps * 10)
         self.synced_video_queue = asyncio.Queue(self.fps * 10)
 
-        self.audio_qsize = int(config.video_ptime // config.audio_ptime)
-        assert self.audio_qsize > 0
         self.audio_frame: AudioFrame = None
         self.video_frame: VideoFrame = None
         self._stop_event = asyncio.Event()
@@ -57,7 +55,7 @@ class AudioStreamTrack(MediaStreamTrack):
         self.config = config
         self.fps = config.fps
         self.sample_rate = config.sample_rate
-        self.ptime = config.audio_ptime
+        self.ptime = config.ptime
         self.timebase = fractions.Fraction(1, self.sample_rate)
         self.timestamp = 0
         self.track_sync = track_sync
@@ -98,7 +96,7 @@ class VideoStreamTrack(MediaStreamTrack):
         self.config = config
         self.fps = config.fps
         self.clock_rate = config.video_clock_rate
-        self.ptime = config.video_ptime
+        self.ptime = config.ptime
         self.timebase = fractions.Fraction(1, self.clock_rate)
         self.timestamp = 0
         self.track_sync = track_sync
