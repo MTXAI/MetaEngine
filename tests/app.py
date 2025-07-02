@@ -12,7 +12,7 @@ from engine.human.player.player import HumanPlayer
 from engine.human.voice.asr import soundfile_producer
 
 f = '../avatars/wav2lip256_avatar1'
-s_f = '../tests/test_datas/asr_example.wav'
+s_f = '../tests/test_datas/asr.wav'
 c_f = '../checkpoints/wav2lip.pth'
 
 model = Wav2LipWrapper(c_f)

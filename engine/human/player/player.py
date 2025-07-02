@@ -7,6 +7,8 @@ from engine.human.avatar.avatar import ModelWrapper
 from engine.human.player.container import AudioContainer, VideoContainer
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
 from engine.utils.pipeline import Pipeline
+from engine.utils.pool import TaskInfo
+from engine.runtime import thread_pool
 
 
 class HumanPlayer:
@@ -85,8 +87,6 @@ if __name__ == '__main__':
 
     from engine.config import WAV2LIP_PLAYER_CONFIG
     from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
-    from engine.runtime import thread_pool
-    from engine.utils.pool import TaskInfo
     from engine.human.voice.asr import soundfile_producer
 
     f = '../../../avatars/wav2lip256_avatar1'

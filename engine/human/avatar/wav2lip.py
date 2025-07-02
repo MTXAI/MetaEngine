@@ -66,7 +66,7 @@ class Wav2LipWrapper(ModelWrapper):
         i = 0
         audio_feature_batch = []
         while i < batch_size:
-            start_idx = config.window_left
+            start_idx = 0
             if start_idx + mel_step_size > len(mel[0]):
                 audio_feature_batch.append(mel[:, len(mel[0]) - mel_step_size:])
             else:

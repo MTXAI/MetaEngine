@@ -21,7 +21,7 @@ class StreamTrackSync:
 
         self.audio_qsize = int(config.video_ptime // config.audio_ptime)
         assert self.audio_qsize > 0
-        self.audio_frames = asyncio.Queue(self.audio_qsize)
+        self.audio_frame: AudioFrame = None
         self.video_frame: VideoFrame = None
         self._stop_event = asyncio.Event()
 
@@ -32,16 +32,15 @@ class StreamTrackSync:
         await self.video_queue.put(frame)
 
     async def _sync_frame(self):
-        qsize = self.audio_frames.qsize()
-        for i in range(self.audio_qsize - qsize):
-            audio_frame = await self.audio_queue.get()
-            await self.audio_frames.put(audio_frame)
+        if self.audio_frame is None:
+            self.audio_frame = await self.audio_queue.get()
         if self.video_frame is None:
             self.video_frame = await self.video_queue.get()
 
     async def get_audio_frame(self) -> AudioFrame:
         await self._sync_frame()
-        frame = await self.audio_frames.get()
+        frame = self.audio_frame
+        self.audio_frame = None
         return frame
 
     async def get_video_frame(self) -> VideoFrame:

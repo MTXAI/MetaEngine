@@ -81,7 +81,8 @@ class AudioContainer:
         return chunk, state, frame
 
     def _warmup(self):
-        for _ in range(self.config.warmup_iters):
+        warmup_iters = max(self.config.warmup_iters, self.batch_size)
+        for _ in range(warmup_iters):
             chunk, state, frame = self._read_frame()
             asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(frame), self.loop)
             self.frame_batch.append(chunk)
@@ -91,14 +92,14 @@ class AudioContainer:
         while not self._stop_event.is_set():
             try:
                 silence = True
-                for i in range(self.batch_size * 2):
+                for i in range(self.batch_size):
                     chunk, state, frame = self._read_frame()
                     asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(frame), self.loop)
                     self.frame_batch.append(chunk)
                     if state == 1:
                         silence = False
                 audio_feature_batch = self.model.encode_audio_feature(self.frame_batch, self.config)
-                self.frame_batch = self.frame_batch[self.batch_size * 2:]
+                self.frame_batch = self.frame_batch[self.batch_size:]
                 yield Data(
                     data=audio_feature_batch,
                     silence=silence,
@@ -122,6 +123,14 @@ class VideoContainer:
             track_sync: StreamTrackSync,
             loop: asyncio.AbstractEventLoop,
     ):
+        """
+        接收 audio feature, 生成视频帧
+        :param config:
+        :param model:
+        :param avatar:
+        :param track_sync:
+        :param loop:
+        """
         self.config = config
         self.batch_size = config.batch_size
         self.fps = config.fps
