@@ -8,9 +8,11 @@
 
 from typing import AsyncGenerator
 
+from openai import OpenAI
+
 from engine.agent.agents.smol.agents import QaAgent
 from engine.human.utils.data import Data
-from engine.utils.pipeline import AsyncConsumer, AsyncConsumerFactory, PipelineCallback
+from engine.utils.pipeline import PipelineCallback
 
 
 ## Producer
@@ -43,22 +45,6 @@ def text_fileter_handler(data: Data):
 
 
 ## Consumer
-def tts_consumer() -> AsyncConsumer:
-    handler = None
-
-    def consume_fn(data: Data, processed_data: Data=None):
-        return data
-
-    return AsyncConsumerFactory.with_consume_fn(consume_fn, handler=handler)
-
-
-def async_tts_consumer() -> AsyncConsumer:
-    async def consume_fn(data: Data, processed_data: Data=None):
-        pass
-
-    handler = None
-    return AsyncConsumerFactory.with_consume_fn(consume_fn, handler=handler)
-
 
 ## Callback
 class FinalizerCallback(PipelineCallback):
@@ -68,4 +54,3 @@ class FinalizerCallback(PipelineCallback):
     def on_stop(self):
         super().on_stop()
         self.client.finalizer()  # just an example
-

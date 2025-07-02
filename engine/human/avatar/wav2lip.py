@@ -10,7 +10,7 @@ import torch
 from tqdm import tqdm
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
-from engine.human.avatar.avatar import ModelWrapper
+from engine.human.avatar.avatar import AvatarModelWrapper
 from models.wav2lip.audio import melspectrogram
 from models.wav2lip.models import Wav2Lip
 
@@ -52,7 +52,7 @@ def load_avatar(avatar_path):
 
     return frame_list_cycle ,face_list_cycle ,coord_list_cycle
 
-class Wav2LipWrapper(ModelWrapper):
+class Wav2LipWrapper(AvatarModelWrapper):
     def __init__(self, path):
         super().__init__()
         self.model = load_model(path)

@@ -26,12 +26,6 @@ def sounddevice_producer():
     async def produce_fn() -> AsyncGenerator:
         pass
 
-
-def websocket_producer():
-    async def produce_fn() -> AsyncGenerator:
-        pass
-
-
 ## Handler
 
 

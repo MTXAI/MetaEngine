@@ -86,7 +86,7 @@ class PlayerConfig(EasyConfig):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-fps = 100.
+fps = 50.
 WAV2LIP_PLAYER_CONFIG = PlayerConfig(
     dict(
         fps=int(fps),

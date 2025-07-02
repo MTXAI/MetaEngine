@@ -7,7 +7,7 @@ from engine.config import PlayerConfig
 from engine.human.utils.data import Data
 
 
-class ModelWrapper(nn.Module):
+class AvatarModelWrapper(nn.Module):
     def encode_audio_feature(self, frame_batch: List[Data], config: PlayerConfig):
         pass
 

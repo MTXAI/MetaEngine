@@ -3,7 +3,7 @@ import time
 from typing import Tuple, Callable
 
 from engine.config import PlayerConfig
-from engine.human.avatar.avatar import ModelWrapper
+from engine.human.avatar.avatar import AvatarModelWrapper
 from engine.human.player.container import AudioContainer, VideoContainer
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
 from engine.utils.pipeline import Pipeline
@@ -15,7 +15,7 @@ class HumanPlayer:
     def __init__(
             self,
             config: PlayerConfig,
-            model: ModelWrapper,
+            model: AvatarModelWrapper,
             avatar: Tuple,
             loop: asyncio.AbstractEventLoop,
             audio_producer: Callable,

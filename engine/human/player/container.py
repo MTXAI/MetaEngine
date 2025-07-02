@@ -12,7 +12,7 @@ from av import AudioFrame, VideoFrame
 from torch import nn
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
-from engine.human.avatar.avatar import ModelWrapper
+from engine.human.avatar.avatar import AvatarModelWrapper
 from engine.human.player.track import StreamTrackSync
 from engine.human.utils.data import Data
 
@@ -21,7 +21,7 @@ class AudioContainer:
     def __init__(
             self,
             config: PlayerConfig,
-            model: ModelWrapper,
+            model: AvatarModelWrapper,
             track_sync: StreamTrackSync,
             loop: asyncio.AbstractEventLoop,
     ):
