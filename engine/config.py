@@ -1,6 +1,7 @@
 import os.path
 from pathlib import Path
 
+from engine.utils.common import get_device_and_start_method
 from engine.utils.config import EasyConfig
 
 
@@ -53,3 +54,49 @@ ONE_API_LLM_MODEL = LLMModelConfig(
         api_base_url="http://localhost:3000/v1",
     )
 )
+
+_device, start_method = get_device_and_start_method()
+class RuntimeConfig(EasyConfig):
+    device: str
+    start_method: str
+    max_workers: int
+    max_queue_size: int
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.device = _device
+        self.start_method = start_method
+
+DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
+    dict(
+        max_workers=8,
+        max_queue_size=12,
+    )
+)
+
+
+class PlayerConfig(EasyConfig):
+    fps: int
+    sample_rate: int
+    batch_size: int
+    warmup_iters: int
+    timeout: float
+    audio_ptime: float
+    video_ptime: float
+    video_clock_rate: int
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+fps = 50.
+WAV2LIP_PLAYER_CONFIG = PlayerConfig(
+    dict(
+        fps=int(fps),
+        sample_rate=16000,
+        batch_size=16,
+        warmup_iters=16,
+        timeout=1/fps/4,
+        audio_ptime=1/fps,
+        video_ptime=1/fps,
+        video_clock_rate=90000,
+    )
+)
+

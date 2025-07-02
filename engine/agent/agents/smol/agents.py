@@ -1,4 +1,4 @@
-from smolagents import CodeAgent, ToolCallingAgent
+from smolagents import ToolCallingAgent
 
 
 class QaAgent(ToolCallingAgent):

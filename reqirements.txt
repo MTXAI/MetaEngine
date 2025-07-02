@@ -1,9 +1,11 @@
+setuptools_rust
 openai
 langchain
 langchain-core
 langchain-experimental
 chromadb
 numpy==1.26.4
+rich=13.9.4
 jieba
 datasets==2.21.0
 modelscope
@@ -19,3 +21,11 @@ pyaudio
 av
 soundfile
 sounddevice
+openmim
+mmengine
+mmcv==2.0.1
+mmdet==3.1.0
+mmpose==1.1.0
+gdown
+face-alignment
+
