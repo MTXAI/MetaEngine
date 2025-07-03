@@ -77,9 +77,11 @@ def test_knowledge_agent():
     ai_history = History("ai", "MetaEngine作者是爱因斯坦")
     h.append(user_history)
     h.append(ai_history)
-    agent = KnowledgeAgent(model, vector_store, History.convert_histories_to_msg_str(h))
+    agent = KnowledgeAgent(model, vector_store)
     print("Final output:")
-    for output in agent.query("MetaEngine是什么? 作者是谁?"):
+    import asyncio
+    for output in agent.stream_answer(question="MetaEngine是什么? 作者是谁?",
+                                                  chat_history=History.convert_histories_to_msg_str(h)):
         print(output.content)
 
 if __name__ == '__main__':

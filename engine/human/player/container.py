@@ -11,7 +11,10 @@ import torch
 from av import AudioFrame, VideoFrame
 from openai import AsyncOpenAI
 from torch import nn
+from typing_inspection.typing_objects import is_final
 
+from engine.agent.agents.base_agent import BaseAgent
+from engine.agent.agents.custom.agents import KnowledgeAgent
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper
 from engine.human.player.track import StreamTrackSync
@@ -31,7 +34,7 @@ class TextContainer(Container):
     def __init__(
             self,
             config: PlayerConfig,
-            agent: AsyncOpenAI,
+            agent: BaseAgent,
             model: TTSModelWrapper,
     ):
         """
@@ -54,18 +57,29 @@ class TextContainer(Container):
         self.audio_queue.queue.clear()
 
     def put_text_data(self, data: Data) -> Data:
-        # todo @xjl, 处理和检查 text
         text = data.get("data")
-        if text.startswith("fuck"):
+        is_chat = data.get("is_chat")
+        try:
+            if is_chat:
+                # 将data放入agent并进行回答
+                loop = asyncio.get_event_loop()
+                async def handle_async():
+                    async for chunk in await self.agent.stream_answer(text):
+                        print(chunk)
+                        self.queue.put(Data(data=chunk, is_chat=True))
+                    self.queue.put(Data(is_final=True))
+
+                loop.run_until_complete(handle_async())
+            else:
+                # 普通文本, 直接放入队列
+                self.queue.put(Data(data=text, is_chat=False, is_final=True))
+        except Exception as e:
+            print(f"Error in agent processing: {e}")
             return Data(
                 ok=False,
-                msg="fuck data",
+                msg=str(e),
             )
-
-        self.queue.put(data)
-        return Data(
-            ok=True,
-        )
+        return Data(ok=True)
 
     def text_producer(self):
         """
@@ -85,21 +99,19 @@ class TextContainer(Container):
                         is_final=True,
                     )
                 else:
-                    # chat TODO @xjl
-                    i = 0
-                    while i < 100:
+                    # chat
+                    is_final = text_data.get("is_final", False)
+                    if is_final:
+                        # 最后发送一个标记数据, 代表是最后一个
                         yield Data(
                             data="",
                             is_stream=True,
-                            is_final=False,
+                            is_final=True,
                         )
-                        i += 1
-
-                    # 最后发送一个标记数据, 代表是最后一个
                     yield Data(
-                        data="",
+                        data=text,
                         is_stream=True,
-                        is_final=True,
+                        is_final=False,
                     )
             except queue.Empty:
                 continue

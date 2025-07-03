@@ -1,15 +1,17 @@
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
-from typing import Iterator
+from typing import Iterator, AsyncGenerator
 
-class KnowledgeAgent:
+from engine.agent.agents.base_agent import BaseAgent
+
+
+class KnowledgeAgent(BaseAgent):
     """
     只与大模型交互一次，先联网搜索和查找rag，将结果放入prompt，最后流式返回query结果
     """
 
-    def __init__(self, model, vector_db, chat_history):
+    def __init__(self, model, vector_db):
         self.llm = model
         self.vector_db = vector_db
-        self.chat_history = chat_history
         self.search_wrapper = DuckDuckGoSearchAPIWrapper(max_results=3)
 
     def _retrieve_knowledge(self, query: str) -> str:
@@ -19,7 +21,7 @@ class KnowledgeAgent:
     def _web_search(self, query: str) -> str:
         return self.search_wrapper.run(query)
 
-    def _build_prompt(self, question: str, rag: str, web: str) -> str:
+    def _build_prompt(self, question: str, rag: str, web: str, chat_history: str) -> str:
         prompt = f"""
             你是一个专业助手，请根据以下信息回答用户问题。
             
@@ -30,7 +32,7 @@ class KnowledgeAgent:
             {web}
             
             【历史聊天记录】
-            {self.chat_history}
+            {chat_history}
             
             【用户问题】
             {question}
@@ -39,12 +41,13 @@ class KnowledgeAgent:
         """
         return prompt
 
-    def query(self, question: str) -> Iterator[str]:
+    def stream_answer(self, question: str, **kwargs) -> AsyncGenerator[str, None]:
         """
-        先查RAG和网络，再拼prompt，只调用一次大模型，流式返回
+        实现 BaseAgent 的 stream_answer 方法，先查 RAG 和网络和历史记录，再拼 prompt，只调用一次大模型，流式返回
         """
         rag = self._retrieve_knowledge(question)
         web = self._web_search(question)
-        prompt = self._build_prompt(question, rag, web)
-        # 假设llm支持stream方法
+        chat_history = kwargs.get("chat_history")
+        prompt = self._build_prompt(question, rag, web, chat_history)
+        # 假设 llm 支持 stream 方法
         return self.llm.stream(prompt)

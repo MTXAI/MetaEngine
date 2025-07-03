@@ -11,6 +11,7 @@ class ProjectConfig(EasyConfig):
     app_log_path: Path
     app_log_file: Path
     vecdb_path: Path
+    docs_path: Path
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         os.makedirs(self.app_log_path, exist_ok=True)
@@ -20,6 +21,7 @@ _default_workspace_path: Path = _default_root_path / '.workspace'
 _default_app_log_path: Path = _default_workspace_path / 'logs'
 _default_app_log_file: Path = _default_app_log_path / 'app.log'
 _default_vecdb_path: Path = _default_workspace_path / 'data/file-rag-chroma_db'
+_default_docs_path: Path = _default_workspace_path / 'data/rag_files'
 DEFAULT_PROJECT_CONFIG = ProjectConfig(
     dict(
         root_path=_default_root_path,
@@ -27,6 +29,7 @@ DEFAULT_PROJECT_CONFIG = ProjectConfig(
         app_log_path=_default_app_log_path,
         app_log_file=_default_app_log_file,
         vecdb_path=_default_vecdb_path,
+        docs_path=_default_vecdb_path,
     )
 )
 

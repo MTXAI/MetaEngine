@@ -3,9 +3,13 @@ import queue
 import time
 from typing import Tuple, Callable
 
-from openai import AsyncOpenAI
+from langchain_openai import ChatOpenAI
 
-from engine.config import PlayerConfig
+
+from engine.agent.agents.base_agent import BaseAgent
+from engine.agent.agents.custom.agents import KnowledgeAgent
+from engine.agent.vecdb.chroma import clean_db, create_db
+from engine.config import PlayerConfig, QWEN_LLM_MODEL, DEFAULT_PROJECT_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper
 from engine.human.player.container import AudioContainer, VideoContainer, TextContainer
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
@@ -19,7 +23,7 @@ class HumanPlayer:
     def __init__(
             self,
             config: PlayerConfig,
-            agent: AsyncOpenAI,
+            agent: BaseAgent,
             tts_model: TTSModelWrapper,
             avatar_model: AvatarModelWrapper,
             avatar: Tuple,
@@ -138,11 +142,21 @@ if __name__ == '__main__':
     #     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
     # )
     avatar_model = Wav2LipWrapper(c_f)
-    agent = AsyncOpenAI(
-        # one api 生成的令牌
-        api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
-        base_url="http://localhost:3000/v1"
+    # agent = AsyncOpenAI(
+    #     # one api 生成的令牌
+    #     api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
+    #     base_url="http://localhost:3000/v1"
+    # )
+    model = ChatOpenAI(
+        model=QWEN_LLM_MODEL.model_id,
+        api_key=QWEN_LLM_MODEL.api_key,
+        base_url=QWEN_LLM_MODEL.api_base_url,
     )
+    vecdb_path = DEFAULT_PROJECT_CONFIG.vecdb_path
+    docs_path = DEFAULT_PROJECT_CONFIG.docs_path
+    clean_db(vecdb_path)
+    vector_store = create_db(vecdb_path, docs_path)
+    agent = KnowledgeAgent(model, vector_store)
     player = HumanPlayer(
         config=WAV2LIP_PLAYER_CONFIG,
         agent=agent,
