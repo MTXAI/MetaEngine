@@ -12,7 +12,7 @@ from engine.config import PlayerConfig
 
 
 class StreamTrackSync:
-    def __init__(self, config: PlayerConfig, prefer='audio'):
+    def __init__(self, config: PlayerConfig, prefer='video'):
         self.fps = config.fps
         self.lock = asyncio.Lock()
         self.audio_queue = asyncio.Queue(self.fps * 3)
@@ -20,17 +20,6 @@ class StreamTrackSync:
 
         self.prefer = prefer
         self.sync_queue = asyncio.Queue()
-
-    def flush(self):
-        for _ in range(self.audio_queue.qsize()):
-            self.audio_queue.get_nowait()
-            self.audio_queue.task_done()
-        for _ in range(self.video_queue.qsize()):
-            self.video_queue.get_nowait()
-            self.video_queue.task_done()
-        for _ in range(self.sync_queue.qsize()):
-            self.sync_queue.get_nowait()
-            self.sync_queue.task_done()
 
     async def put_audio_frame(self, frame: AudioFrame):
         if self.prefer == 'video':

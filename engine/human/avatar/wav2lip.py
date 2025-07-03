@@ -11,8 +11,8 @@ from tqdm import tqdm
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper
-from models.talk.wav2lip.audio import melspectrogram
-from models.talk.wav2lip.models import Wav2Lip
+from models.wav2lip.audio import melspectrogram
+from models.wav2lip import Wav2Lip
 
 
 def load_model(path):

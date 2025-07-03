@@ -9,15 +9,77 @@ import cv2
 import numpy as np
 import torch
 from av import AudioFrame, VideoFrame
+from openai import AsyncOpenAI
 from torch import nn
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper
 from engine.human.player.track import StreamTrackSync
 from engine.human.utils.data import Data
+from engine.human.voice.voice import TTSModelWrapper
 
 
-class AudioContainer:
+class Container:
+    def flush(self):
+        pass
+
+    def shutdown(self):
+        pass
+
+
+class TextContainer(Container):
+    def __init__(
+            self,
+            config: PlayerConfig,
+            agent: AsyncOpenAI,
+            model: TTSModelWrapper,
+    ):
+        self.config = config
+        self.agent = agent
+        self.model = model
+
+        self._stop_event = threading.Event()
+
+        self.queue = queue.Queue()
+        self.text_queue = queue.Queue()
+
+    def flush(self):
+        self.queue.queue.clear()
+        self.text_queue.queue.clear()
+
+    def put_text_data(self, text_data: Data):
+        self.queue.put(text_data)
+
+    def _split_text(self, text: str):
+        return text
+
+    def text_producer(self):
+        while not self._stop_event.is_set():
+            text_data = self.queue.get(timeout=1)
+            text = text_data.get("data")
+            is_chat = text_data.get("chat", False)
+            if not is_chat:
+                # echo
+                text_blocks = self._split_text(text)
+                for text_block in text_blocks:
+                    yield Data(
+                        data=text_block,
+                    )
+            else:
+                # chat TODO @xjl
+                pass
+
+    def text_consumer(self):
+        pass
+
+    def audio_producer(self):
+        pass
+
+    def shutdown(self):
+        self._stop_event.set()
+
+
+class AudioContainer(Container):
     def __init__(
             self,
             config: PlayerConfig,
@@ -53,7 +115,7 @@ class AudioContainer:
         self.frame_batch = []
         self.frame_fragment = None
 
-    def consumer(self, data: Data):
+    def audio_consumer(self, data: Data):
         is_final = data.get("is_final")
         speech_data = data.get("data")
         if self.frame_fragment is not None:
@@ -93,7 +155,7 @@ class AudioContainer:
             asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(frame), self.loop)
             self.frame_batch.append(chunk)
 
-    def producer(self):
+    def audio_feature_producer(self):
         self._warmup()
         while not self._stop_event.is_set():
             try:
@@ -120,7 +182,7 @@ class AudioContainer:
         self._stop_event.set()
 
 
-class VideoContainer:
+class VideoContainer(Container):
     def __init__(
             self,
             config: PlayerConfig,
@@ -164,7 +226,7 @@ class VideoContainer:
         frame = VideoFrame.from_ndarray(image, format="bgr24")
         return frame
 
-    def consumer(self, data: Data):
+    def audio_feature_consumer(self, data: Data):
         audio_feature_batch = data.get("data")
         silence = data.get("silence")
         if silence:
@@ -242,12 +304,12 @@ if __name__ == '__main__':
 
     pipeline_audio = Pipeline(
         producer=soundfile_producer(s_f, fps=10),
-        consumer=audio_c.consumer,
+        consumer=audio_c.audio_consumer,
     )
 
     pipeline_video = Pipeline(
-        producer=audio_c.producer,
-        consumer=video_c.consumer,
+        producer=audio_c.audio_feature_producer,
+        consumer=video_c.audio_feature_consumer,
     )
 
     for pipe in [pipeline_audio, pipeline_video]:

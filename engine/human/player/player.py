@@ -1,11 +1,15 @@
 import asyncio
+import queue
 import time
 from typing import Tuple, Callable
 
+from openai import AsyncOpenAI
+
 from engine.config import PlayerConfig
 from engine.human.avatar.avatar import AvatarModelWrapper
-from engine.human.player.container import AudioContainer, VideoContainer
+from engine.human.player.container import AudioContainer, VideoContainer, TextContainer
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
+from engine.human.voice.voice import TTSModelWrapper
 from engine.utils.pipeline import Pipeline
 from engine.utils.pool import TaskInfo
 from engine.runtime import thread_pool
@@ -15,13 +19,13 @@ class HumanPlayer:
     def __init__(
             self,
             config: PlayerConfig,
-            model: AvatarModelWrapper,
+            agent: AsyncOpenAI,
+            tts_model: TTSModelWrapper,
+            avatar_model: AvatarModelWrapper,
             avatar: Tuple,
             loop: asyncio.AbstractEventLoop,
-            audio_producer: Callable,
     ):
         self.config = config
-        self.model = model
         self.track_sync = StreamTrackSync(config)
         self.audio_track = AudioStreamTrack(
             config,
@@ -31,35 +35,49 @@ class HumanPlayer:
             config,
             self.track_sync,
         )
+        self.text_container = TextContainer(
+            config,
+            agent,
+            tts_model
+        )
         self.audio_container = AudioContainer(
             config,
-            model,
+            avatar_model,
             self.track_sync,
             loop
         )
         self.video_container = VideoContainer(
             config,
-            model,
+            avatar_model,
             avatar,
             self.track_sync,
             loop
         )
+        self.containers = [
+            self.text_container,
+            self.audio_container,
+            self.video_container,
+        ]
         self.loop = loop
         self.pipelines = [
             Pipeline(
-                producer=audio_producer,
-                consumer=self.audio_container.consumer,
+                producer=self.text_container.text_producer,
+                consumer=self.text_container.text_consumer,
             ),
             Pipeline(
-                producer=self.audio_container.producer,
-                consumer=self.video_container.consumer,
+                producer=self.text_container.audio_producer,
+                consumer=self.audio_container.audio_consumer,
+            ),
+            Pipeline(
+                producer=self.audio_container.audio_feature_producer,
+                consumer=self.video_container.audio_feature_consumer,
             )
         ]
         self._start = False
 
     def flush(self):
-        self.audio_container.flush()
-        self.track_sync.flush()
+        for container in self.containers:
+            container.flush()
 
     def start(self):
         if self._start:
@@ -80,7 +98,8 @@ class HumanPlayer:
         self._start = True
 
     def shutdown(self):
-        self.audio_container.shutdown()
+        for container in self.containers:
+            container.shutdown()
         for pipe in self.pipelines:
             pipe.shutdown()
 
@@ -89,7 +108,6 @@ if __name__ == '__main__':
 
     from engine.config import WAV2LIP_PLAYER_CONFIG
     from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
-    from engine.human.voice import soundfile_producer
 
     f = '../../../avatars/wav2lip256_avatar1'
     s_f = '../../../tests/test_datas/asr.wav'
@@ -104,7 +122,6 @@ if __name__ == '__main__':
         model=model,
         avatar=load_avatar(f),
         loop=loop,
-        audio_producer=soundfile_producer(s_f, fps=10)
     )
 
     player.start()
