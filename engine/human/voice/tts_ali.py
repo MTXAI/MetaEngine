@@ -73,6 +73,8 @@ class AliTTSWrapper(TTSModelWrapper):
         for _ in range(self.retry_count):
             try:
                 buffer_data = self.synthesizer.call(text)
+                if buffer_data is None:
+                    continue
                 self.buffer.write(buffer_data)
                 speech = resample_sound(self.buffer, self.sample_rate)
                 self.buffer.seek(0)

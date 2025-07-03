@@ -184,6 +184,7 @@ if __name__ == '__main__':
 
     async def put_text_data():
         await asyncio.sleep(1)
+        player.flush()
         res_data = player.text_container.put_text_data(Data(
             data="你好, 我是墨菲",
             is_chat=False,

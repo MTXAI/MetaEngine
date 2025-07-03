@@ -137,6 +137,7 @@ class TextContainer(Container):
         while not self._stop_event.is_set():
             try:
                 audio_data = self.audio_queue.get(timeout=1)
+                print(audio_data)
                 # todo @zjh, 进一步处理音频
 
                 yield audio_data  # data, is_final

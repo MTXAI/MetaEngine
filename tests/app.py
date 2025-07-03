@@ -13,6 +13,7 @@ from engine.human.player.player import HumanPlayer
 from engine.human.voice import soundfile_producer
 from engine.human.voice.tts_ali import AliTTSWrapper
 from engine.human.voice.tts_edge import EdgeTTSWrapper
+from engine.runtime import thread_pool
 from engine.utils.data import Data
 
 a_f = '../avatars/wav2lip256_avatar1'
@@ -69,13 +70,11 @@ async def websocket_handler(request):
     ws = web.WebSocketResponse()
     await ws.prepare(request)
 
-
     # 创建新的 RTCPeerConnection
     pc = RTCPeerConnection()
     client_id = id(pc)
     connected_clients.add(client_id)
     logging.info(f"客户端 {client_id} 已连接")
-
 
     # 处理 ICE 候选
     @pc.on("icecandidate")
@@ -153,12 +152,52 @@ async def websocket_handler(request):
     return ws
 
 
+# echo 接口
+async def echo(request):
+    data = await request.json()
+    text = data.get('text')
+    if text:
+        # player.flush()
+        res_data = player.text_container.put_text_data(
+            Data(
+                data=text,
+                is_chat=False,
+            )
+        )
+        print(res_data)
+        return web.json_response({"status": "success", "data": res_data})
+    return web.json_response({"status": "error", "message": "Missing text parameter"}, status=400)
+
+
+# chat 接口
+async def chat(request):
+    data = await request.json()
+    question = data.get('question')
+    if question:
+        # player.flush()
+        # 这里模拟 AI 回答，实际应用中需要调用 OpenAI 等服务获取回答
+        answer = "这是 AI 的回答"  # 替换为实际的 AI 回答逻辑
+        res_data = await loop.run_in_executor(
+            thread_pool,
+            player.text_container.put_text_data,
+            Data(
+                data=answer,
+                is_chat=True,
+            )
+        )
+        print(res_data)
+        return web.json_response({"status": "success", "answer": answer, "data": res_data})
+    return web.json_response({"status": "error", "message": "Missing question parameter"}, status=400)
+
+
 # 主函数
 def main():
     """启动 Web 服务器"""
     app = web.Application()
     app.router.add_get("/", index)
     app.router.add_get("/ws", websocket_handler)
+    app.router.add_post("/echo", echo)
+    app.router.add_post("/chat", chat)
 
     # 启动服务器
     runner = web.AppRunner(app)
@@ -169,15 +208,8 @@ def main():
 
     player.start()
 
-    res_data = player.text_container.put_text_data(Data(
-        data="你好, 我是墨菲",
-        is_chat=False,
-    ))
-    print(res_data)
-
     logging.info("服务器已启动，访问 http://localhost:8080")
     loop.run_forever()
-
 
 
 if __name__ == "__main__":

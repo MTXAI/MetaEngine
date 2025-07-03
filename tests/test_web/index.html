@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -40,7 +41,7 @@
         backdrop-filter: blur(4px);
       }
       .text-shadow {
-        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
       .transition-all-300 {
         transition: all 300ms ease-in-out;
@@ -48,6 +49,7 @@
     }
   </style>
 </head>
+
 <body class="bg-dark font-inter text-light min-h-screen flex flex-col">
   <!-- 顶部导航栏 -->
   <header class="bg-dark/80 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-50 transition-all duration-300">
@@ -144,6 +146,13 @@
         </div>
       </div>
 
+      <!-- 输入框和按钮 -->
+      <div class="mb-6">
+        <input type="text" id="inputText" class="bg-gray-800 border border-gray-700 rounded-lg p-2 w-full mb-2" placeholder="输入要复述的文字或问题">
+        <button id="echoBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg mr-2">复述</button>
+        <button id="chatBtn" class="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg">对话</button>
+      </div>
+
       <!-- 日志面板 -->
       <div class="bg-gray-900/70 border border-gray-800 rounded-lg overflow-hidden">
         <div class="px-4 py-2 bg-gray-800/50 border-b border-gray-700 flex justify-between items-center">
@@ -185,6 +194,9 @@
     const loadingIndicator = document.getElementById('loadingIndicator');
     const videoControls = document.getElementById('videoControls');
     const videoStats = document.getElementById('videoStats');
+    const inputText = document.getElementById('inputText');
+    const echoBtn = document.getElementById('echoBtn');
+    const chatBtn = document.getElementById('chatBtn');
 
     // WebRTC 相关变量
     let pc = null;
@@ -286,22 +298,9 @@
           ]
         });
 
-
         // 明确添加transceivers并设置方向为recvonly
         pc.addTransceiver('video', { direction: 'recvonly' });
         pc.addTransceiver('audio', { direction: 'recvonly' });
-
-
-        // // 处理ICE候选
-        // pc.onicecandidate = (event) => {
-        //   if (event.candidate) {
-        //     log('发送ICE候选到服务器');
-        //     signalingSocket.send(JSON.stringify({
-        //       type: 'candidate',
-        //       candidate: event.candidate
-        //     }));
-        //   }
-        // };
 
         // 处理远程流
         pc.ontrack = (event) => {
@@ -338,8 +337,8 @@
           connectionStatus.textContent = pc.connectionState;
 
           if (pc.connectionState === 'disconnected' ||
-              pc.connectionState === 'failed' ||
-              pc.connectionState === 'closed') {
+            pc.connectionState === 'failed' ||
+            pc.connectionState === 'closed') {
             disconnect();
           }
         };
@@ -349,37 +348,37 @@
 
         // 创建offer并等待ICE收集完成
         signalingSocket.onopen = () => {
-            log('已连接到信令服务器');
+          log('已连接到信令服务器');
 
-            // 创建offer
-            pc.createOffer().then(offer => {
-                return pc.setLocalDescription(offer);
-            }).then(() => {
-                // 等待ICE收集完成
-                return new Promise(resolve => {
-                    if (pc.iceGatheringState === 'complete') {
-                        resolve();
-                    } else {
-                        const checkState = () => {
-                            if (pc.iceGatheringState === 'complete') {
-                                pc.removeEventListener('icegatheringstatechange', checkState);
-                                resolve();
-                            }
-                        };
-                        pc.addEventListener('icegatheringstatechange', checkState);
-                    }
-                });
-            }).then(() => {
-                // 发送offer到服务器
-                log('发送offer到服务器');
-                signalingSocket.send(JSON.stringify({
-                    type: 'offer',
-                    sdp: pc.localDescription.sdp
-                }));
-            }).catch(error => {
-                log(`创建offer失败: ${error.message}`, 'error');
-                disconnect();
+          // 创建offer
+          pc.createOffer().then(offer => {
+            return pc.setLocalDescription(offer);
+          }).then(() => {
+            // 等待ICE收集完成
+            return new Promise(resolve => {
+              if (pc.iceGatheringState === 'complete') {
+                resolve();
+              } else {
+                const checkState = () => {
+                  if (pc.iceGatheringState === 'complete') {
+                    pc.removeEventListener('icegatheringstatechange', checkState);
+                    resolve();
+                  }
+                };
+                pc.addEventListener('icegatheringstatechange', checkState);
+              }
             });
+          }).then(() => {
+            // 发送offer到服务器
+            log('发送offer到服务器');
+            signalingSocket.send(JSON.stringify({
+              type: 'offer',
+              sdp: pc.localDescription.sdp
+            }));
+          }).catch(error => {
+            log(`创建offer失败: ${error.message}`, 'error');
+            disconnect();
+          });
         };
 
         signalingSocket.onmessage = (event) => {
@@ -413,7 +412,6 @@
         disconnect();
       }
     }
-
 
     // 断开连接
     function disconnect() {
@@ -599,6 +597,58 @@
       }
     }
 
+    // 发送 echo 请求
+    async function sendEchoRequest() {
+      const text = inputText.value;
+      if (text) {
+        try {
+          const response = await fetch('http://localhost:8080/echo', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text })
+          });
+          const data = await response.json();
+          if (data.status === 'success') {
+            log('复述请求发送成功', 'success');
+          } else {
+            log(`复述请求失败: ${data.message}`, 'error');
+          }
+        } catch (error) {
+          log(`发送复述请求时发生错误: ${error.message}`, 'error');
+        }
+      } else {
+        log('请输入要复述的文字', 'warning');
+      }
+    }
+
+    // 发送 chat 请求
+    async function sendChatRequest() {
+      const question = inputText.value;
+      if (question) {
+        try {
+          const response = await fetch('http://localhost:8080/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ question })
+          });
+          const data = await response.json();
+          if (data.status === 'success') {
+            log(`对话请求成功，AI 回答: ${data.answer}`, 'success');
+          } else {
+            log(`对话请求失败: ${data.message}`, 'error');
+          }
+        } catch (error) {
+          log(`发送对话请求时发生错误: ${error.message}`, 'error');
+        }
+      } else {
+        log('请输入问题', 'warning');
+      }
+    }
+
     // 初始化事件监听器
     function initEventListeners() {
       connectBtn.addEventListener('click', connect);
@@ -629,6 +679,9 @@
           }, 3000);
         }
       });
+
+      echoBtn.addEventListener('click', sendEchoRequest);
+      chatBtn.addEventListener('click', sendChatRequest);
     }
 
     // 初始化应用
@@ -641,4 +694,5 @@
     window.addEventListener('load', init);
   </script>
 </body>
+
 </html>
