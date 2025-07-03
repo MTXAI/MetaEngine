@@ -13,6 +13,7 @@ from engine.human.player.player import HumanPlayer
 from engine.human.voice import soundfile_producer
 from engine.human.voice.tts_ali import AliTTSWrapper
 from engine.human.voice.voice import TTSModelWrapper
+from engine.utils.data import Data
 
 a_f = '../avatars/wav2lip256_avatar1'
 s_f = '../tests/test_datas/asr_example.wav'
@@ -22,8 +23,14 @@ tts_model = AliTTSWrapper(
     model_str="cosyvoice-v1",
     api_key="sk-361f246a74c9421085d1d137038d5064",
     voice_type="longxiaochun",
-    sample_rate=WAV2LIP_PLAYER_CONFIG.SAMPLE_RATE,
+    sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
 )
+
+# tts_model = EdgeTTSWrapper(
+#     voice_type="zh-CN-YunxiaNeural",
+#     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
+# )
+
 avatar_model = Wav2LipWrapper(c_f)
 
 # 创建Player实例并启动
@@ -162,6 +169,12 @@ def main():
     loop.run_until_complete(site.start())
 
     player.start()
+
+    res_data = player.text_container.put_text_data(Data(
+        data="你好, 我是墨菲",
+        is_chat=False,
+    ))
+    print(res_data)
 
     logging.info("服务器已启动，访问 http://localhost:8080")
     loop.run_forever()

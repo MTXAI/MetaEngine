@@ -9,7 +9,6 @@ from engine.config import PlayerConfig
 from engine.human.avatar.avatar import AvatarModelWrapper
 from engine.human.player.container import AudioContainer, VideoContainer, TextContainer
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
-from engine.human.voice.tts_ali import AliTTSWrapper
 from engine.human.voice.voice import TTSModelWrapper
 from engine.utils.pipeline import Pipeline, TODOPipelineCallback
 from engine.utils.pool import TaskInfo
@@ -117,11 +116,15 @@ if __name__ == '__main__':
     from engine.config import WAV2LIP_PLAYER_CONFIG
     from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
     from engine.utils.data import Data
+    from engine.human.voice.tts_edge import EdgeTTSWrapper
+    from engine.human.voice.tts_ali import AliTTSWrapper
 
     a_f = '../../../avatars/wav2lip256_avatar1'
     s_f = '../../../tests/test_datas/asr.wav'
     c_f = '../../../checkpoints/wav2lip.pth'
 
+    # 创建Player实例并启动
+    loop = asyncio.new_event_loop()
 
     tts_model = AliTTSWrapper(
         model_str="cosyvoice-v1",
@@ -129,11 +132,12 @@ if __name__ == '__main__':
         voice_type="longxiaochun",
         sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
     )
+
+    # tts_model = EdgeTTSWrapper(
+    #     voice_type="zh-CN-YunxiaNeural",
+    #     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
+    # )
     avatar_model = Wav2LipWrapper(c_f)
-
-    # 创建Player实例并启动
-    loop = asyncio.new_event_loop()
-
     agent = AsyncOpenAI(
         # one api 生成的令牌
         api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
@@ -186,8 +190,8 @@ if __name__ == '__main__':
         ))
         print(res_data)
 
-    asyncio.run_coroutine_threadsafe(listen_audio(), loop=loop)
-    asyncio.run_coroutine_threadsafe(listen_video(), loop=loop)
+    # asyncio.run_coroutine_threadsafe(listen_audio(), loop=loop)
+    # asyncio.run_coroutine_threadsafe(listen_video(), loop=loop)
     asyncio.run_coroutine_threadsafe(put_text_data(), loop=loop)
     asyncio.set_event_loop(loop)
     loop.run_forever()

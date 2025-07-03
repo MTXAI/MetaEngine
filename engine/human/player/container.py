@@ -53,16 +53,16 @@ class TextContainer(Container):
         self.queue.queue.clear()
         self.audio_queue.queue.clear()
 
-    def put_text_data(self, text_data: Data) -> Data:
+    def put_text_data(self, data: Data) -> Data:
         # todo @xjl, 处理和检查 text
-        text = text_data.get("data")
+        text = data.get("data")
         if text.startswith("fuck"):
             return Data(
                 ok=False,
                 msg="fuck data",
             )
 
-        self.queue.put(text_data)
+        self.queue.put(data)
         return Data(
             ok=True,
         )
@@ -75,12 +75,13 @@ class TextContainer(Container):
         while not self._stop_event.is_set():
             try:
                 text_data = self.queue.get(timeout=1)
+                text = text_data.get("data")
                 is_chat = text_data.get("is_chat", False)
                 if not is_chat:
                     # echo
                     yield Data(
-                        data="",
-                        is_stream=True,
+                        data=text,
+                        is_stream=False,
                         is_final=True,
                     )
                 else:
@@ -116,6 +117,8 @@ class TextContainer(Container):
         text = data.get("data")
         is_stream = data.get("is_stream")
         is_final = data.get("is_final")
+        if is_final and len(text) == 0:
+            return
         if is_stream:
             speech_data = self.model.streaming_inference(text)
         else:
@@ -134,7 +137,6 @@ class TextContainer(Container):
         while not self._stop_event.is_set():
             try:
                 audio_data = self.audio_queue.get(timeout=1)
-
                 # todo @zjh, 进一步处理音频
 
                 yield audio_data  # data, is_final
@@ -198,7 +200,6 @@ class AudioContainer(Container):
                 self.frame_fragment = chunk
             else:
                 self.queue.put(chunk)
-        return data
 
     def _make_audio_frame(self, chunk):
         chunk = (chunk * 32767).astype(np.int16)

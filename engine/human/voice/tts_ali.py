@@ -1,4 +1,6 @@
+import asyncio
 import io
+import traceback
 
 import dashscope
 import numpy as np
@@ -26,29 +28,61 @@ class AliTTSWrapper(TTSModelWrapper):
             sample_rate: int,
     ):
         super().__init__()
+        self.retry_count = 3
 
         dashscope.api_key = api_key
         self.buffer = io.BytesIO()
         self.sample_rate = sample_rate
 
-        callback = AliTTSCallback(self.buffer)
+        audio_format = AudioFormat.WAV_22050HZ_MONO_16BIT
         self.synthesizer = SpeechSynthesizer(
             model=model_str,
             voice=voice_type,
-            format=AudioFormat.PCM_22050HZ_MONO_16BIT,
+            format=audio_format,
+        )
+        callback = AliTTSCallback(self.buffer)
+        self.streaming_synthesizer = SpeechSynthesizer(
+            model=model_str,
+            voice=voice_type,
+            format=audio_format,
             callback=callback,
         )
 
+    # todo @zjh, retry
+
+    async def _streaming_call(self, text):
+        for _ in range(self.retry_count):
+            try:
+                self.streaming_synthesizer.streaming_call(text)
+                return
+            except TimeoutError:
+                continue
+            except Exception as e:
+                traceback.print_exc()
+                raise e
+
     def streaming_inference(self, text):
-        self.synthesizer.streaming_call(text)
+        asyncio.new_event_loop().run_until_complete(self._streaming_call(text))
         speech = resample_sound(self.buffer, self.sample_rate)
         self.buffer.seek(0)
         self.buffer.truncate()
+        self.buffer.flush()
         return speech
 
     def inference(self, text):
-        self.buffer.write(self.synthesizer.call(text))
-        speech = resample_sound(self.buffer, self.sample_rate)
-        self.buffer.seek(0)
-        self.buffer.truncate()
-        return speech
+        for _ in range(self.retry_count):
+            try:
+                buffer_data = self.synthesizer.call(text)
+                self.buffer.write(buffer_data)
+                speech = resample_sound(self.buffer, self.sample_rate)
+                self.buffer.seek(0)
+                self.buffer.truncate()
+                self.buffer.flush()
+                return speech
+            except TimeoutError:
+                continue
+            except Exception as e:
+                traceback.print_exc()
+                raise e
+        return None
+
