@@ -16,7 +16,6 @@ from engine.human.voice.tts_edge import EdgeTTSWrapper
 from engine.utils.data import Data
 
 a_f = '../avatars/wav2lip256_avatar1'
-s_f = '../tests/test_datas/asr_example.wav'
 c_f = '../checkpoints/wav2lip.pth'
 
 tts_model = AliTTSWrapper(
