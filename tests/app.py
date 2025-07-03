@@ -12,7 +12,7 @@ from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
 from engine.human.player.player import HumanPlayer
 from engine.human.voice import soundfile_producer
 from engine.human.voice.tts_ali import AliTTSWrapper
-from engine.human.voice.voice import TTSModelWrapper
+from engine.human.voice.tts_edge import EdgeTTSWrapper
 from engine.utils.data import Data
 
 a_f = '../avatars/wav2lip256_avatar1'
