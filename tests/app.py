@@ -83,7 +83,6 @@ async def websocket_handler(request):
                     pc = RTCPeerConnection()
 
                     # 创建并添加音视频轨道
-                    player.flush()
                     audio_track = player.audio_track
                     video_track = player.video_track
 
