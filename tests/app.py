@@ -5,11 +5,13 @@ import traceback
 
 from aiohttp import web, WSMessage
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
+from openai import AsyncOpenAI
 
 from engine.config import WAV2LIP_PLAYER_CONFIG
 from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
 from engine.human.player.player import HumanPlayer
 from engine.human.voice import soundfile_producer
+from engine.human.voice.voice import TTSModelWrapper
 
 a_f = '../avatars/wav2lip256_avatar1'
 s_f = '../tests/test_datas/asr_example.wav'
@@ -20,12 +22,18 @@ model = Wav2LipWrapper(c_f)
 # 创建Player实例并启动
 loop = asyncio.new_event_loop()
 
+agent = AsyncOpenAI(
+    # one api 生成的令牌
+    api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
+    base_url="http://localhost:3000/v1"
+)
 player = HumanPlayer(
     config=WAV2LIP_PLAYER_CONFIG,
-    model=model,
+    agent=agent,
+    tts_model=TTSModelWrapper(),
+    avatar_model=model,
     avatar=load_avatar(a_f),
     loop=loop,
-    audio_producer=soundfile_producer(s_f, fps=10)
 )
 
 # 存储已连接的客户端
