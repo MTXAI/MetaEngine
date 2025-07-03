@@ -15,7 +15,7 @@ from torch import nn
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper
 from engine.human.player.track import StreamTrackSync
-from engine.human.utils.data import Data
+from engine.utils.data import Data
 from engine.human.voice.voice import TTSModelWrapper
 
 
@@ -34,6 +34,12 @@ class TextContainer(Container):
             agent: AsyncOpenAI,
             model: TTSModelWrapper,
     ):
+        """
+        接收 text 数据, 如果是 chat 类型的文本, 先生成回答, 输出 audio
+        :param config:
+        :param agent:
+        :param model:
+        """
         self.config = config
         self.agent = agent
         self.model = model
@@ -41,39 +47,103 @@ class TextContainer(Container):
         self._stop_event = threading.Event()
 
         self.queue = queue.Queue()
-        self.text_queue = queue.Queue()
+        self.audio_queue = queue.Queue()
 
     def flush(self):
         self.queue.queue.clear()
-        self.text_queue.queue.clear()
+        self.audio_queue.queue.clear()
 
-    def put_text_data(self, text_data: Data):
+    def put_text_data(self, text_data: Data) -> Data:
+        # todo @xjl, 处理和检查 text
+        text = text_data.get("data")
+        if text.startswith("fuck"):
+            return Data(
+                ok=False,
+                msg="fuck data",
+            )
+
         self.queue.put(text_data)
-
-    def _split_text(self, text: str):
-        return text
+        return Data(
+            ok=True,
+        )
 
     def text_producer(self):
+        """
+        读取 text, 如果 chat 类型, 则通过 agent 产生流式输出
+        :return:
+        """
         while not self._stop_event.is_set():
-            text_data = self.queue.get(timeout=1)
-            text = text_data.get("data")
-            is_chat = text_data.get("chat", False)
-            if not is_chat:
-                # echo
-                text_blocks = self._split_text(text)
-                for text_block in text_blocks:
+            try:
+                text_data = self.queue.get(timeout=1)
+                is_chat = text_data.get("is_chat", False)
+                if not is_chat:
+                    # echo
                     yield Data(
-                        data=text_block,
+                        data="",
+                        is_stream=True,
+                        is_final=True,
                     )
-            else:
-                # chat TODO @xjl
-                pass
+                else:
+                    # chat TODO @xjl
+                    i = 0
+                    while i < 100:
+                        yield Data(
+                            data="",
+                            is_stream=True,
+                            is_final=False,
+                        )
+                        i += 1
 
-    def text_consumer(self):
-        pass
+                    # 最后发送一个标记数据, 代表是最后一个
+                    yield Data(
+                        data="",
+                        is_stream=True,
+                        is_final=True,
+                    )
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"Text processing error: {e}")
+                traceback.print_exc()
+                break
+
+
+    def text_consumer(self, data: Data):
+        """
+         将文本或文本流, 转为音频
+         :return:
+         """
+        text = data.get("data")
+        is_stream = data.get("is_stream")
+        is_final = data.get("is_final")
+        if is_stream:
+            speech_data = self.model.streaming_inference(text)
+        else:
+            speech_data = self.model.inference(text)
+        audio_data = Data(
+            data=speech_data,
+            is_final=is_final,
+        )
+        self.audio_queue.put(audio_data)
 
     def audio_producer(self):
-        pass
+        """
+        进一步处理 audio, 如变声, 增强等
+        :return:
+        """
+        while not self._stop_event.is_set():
+            try:
+                audio_data = self.audio_queue.get(timeout=1)
+
+                # todo @zjh, 进一步处理音频
+
+                yield audio_data  # data, is_final
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"Audio processing error: {e}")
+                traceback.print_exc()
+                break
 
     def shutdown(self):
         self._stop_event.set()

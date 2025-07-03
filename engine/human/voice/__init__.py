@@ -3,7 +3,7 @@ from typing import AsyncGenerator, Union
 
 import soundfile
 
-from engine.human.utils.data import Data
+from engine.utils.data import Data
 
 
 def soundfile_producer(f: Union[PathLike, str], fps: int):

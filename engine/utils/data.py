@@ -34,5 +34,5 @@ class Data(dict):
         return name in self.__dict__
 
     def __str__(self):
-        return str(self.data)
+        return str(self)
 

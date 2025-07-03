@@ -11,13 +11,20 @@ from engine.config import WAV2LIP_PLAYER_CONFIG
 from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
 from engine.human.player.player import HumanPlayer
 from engine.human.voice import soundfile_producer
+from engine.human.voice.tts_ali import AliTTSWrapper
 from engine.human.voice.voice import TTSModelWrapper
 
 a_f = '../avatars/wav2lip256_avatar1'
 s_f = '../tests/test_datas/asr_example.wav'
 c_f = '../checkpoints/wav2lip.pth'
 
-model = Wav2LipWrapper(c_f)
+tts_model = AliTTSWrapper(
+    model_str="cosyvoice-v1",
+    api_key="sk-361f246a74c9421085d1d137038d5064",
+    voice_type="longxiaochun",
+    sample_rate=WAV2LIP_PLAYER_CONFIG.SAMPLE_RATE,
+)
+avatar_model = Wav2LipWrapper(c_f)
 
 # 创建Player实例并启动
 loop = asyncio.new_event_loop()
@@ -27,11 +34,13 @@ agent = AsyncOpenAI(
     api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
     base_url="http://localhost:3000/v1"
 )
+
+
 player = HumanPlayer(
     config=WAV2LIP_PLAYER_CONFIG,
     agent=agent,
-    tts_model=TTSModelWrapper(),
-    avatar_model=model,
+    tts_model=tts_model,
+    avatar_model=avatar_model,
     avatar=load_avatar(a_f),
     loop=loop,
 )
