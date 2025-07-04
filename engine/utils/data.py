@@ -33,6 +33,17 @@ class Data(dict):
     def __exists__(self, name):
         return name in self.__dict__
 
-    def __str__(self):
-        return str(self.data)
+    def __str__(self) -> str:
+        texts = []
+        for key, value in self.items():
+            if isinstance(value, Data):
+                seperator = '\n'
+            else:
+                seperator = ' '
+            text = key + ':' + seperator + str(value)
+            lines = text.split('\n')
+            for k, line in enumerate(lines[1:]):
+                lines[k + 1] = (' ' * 2) + line
+            texts.extend(lines)
+        return '\n'.join(texts)
 

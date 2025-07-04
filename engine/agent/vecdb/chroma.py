@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
@@ -24,7 +25,7 @@ def load_db(db_path: os.PathLike):
         logging.warning(f"Database {db_path} does not exist.")
         return None
 
-def create_db(db_path: os.PathLike, doc_dir : str):
+def create_db(db_path: os.PathLike, doc_dir : os.PathLike):
     # load file in dir
     source_docs = []
     for file in os.listdir(doc_dir):
@@ -74,4 +75,6 @@ def clean_db(db_path: os.PathLike):
         shutil.rmtree(db_path)
         logging.info(f"Database {db_path} has been cleaned.")
     else:
-        logging.warning(f"Database {db_path} does not exist.")
+        logging.warning(f"Database {db_path} does not exist, will create it.")
+        db_path = Path(db_path)
+        db_path.mkdir(parents=True, exist_ok=True)

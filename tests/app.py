@@ -5,27 +5,60 @@ import traceback
 
 from aiohttp import web, WSMessage
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
+from langchain_openai import ChatOpenAI
+from openai import AsyncOpenAI
 
-from engine.config import WAV2LIP_PLAYER_CONFIG
+from engine.agent.agents.custom import KnowledgeAgent, SimpleAgent
+from engine.agent.vecdb.chroma import clean_db, create_db
+from engine.config import WAV2LIP_PLAYER_CONFIG, QWEN_LLM_MODEL, DEFAULT_PROJECT_CONFIG, ONE_API_LLM_MODEL
 from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
 from engine.human.player.player import HumanPlayer
-from engine.human.voice.asr import soundfile_producer
+from engine.human.voice import soundfile_producer
+from engine.human.voice.tts_ali import AliTTSWrapper
+from engine.human.voice.tts_edge import EdgeTTSWrapper
+from engine.runtime import thread_pool
+from engine.utils.data import Data
 
-f = '../avatars/wav2lip256_avatar1'
-s_f = '../tests/test_datas/asr.wav'
+a_f = '../avatars/wav2lip256_avatar1'
 c_f = '../checkpoints/wav2lip.pth'
 
-model = Wav2LipWrapper(c_f)
+# tts_model = AliTTSWrapper(
+#     model_str="cosyvoice-v1",
+#     api_key="sk-361f246a74c9421085d1d137038d5064",
+#     voice_type="longxiaochun",
+#     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
+# )
+
+tts_model = EdgeTTSWrapper(
+    voice_type="zh-CN-YunxiaNeural",
+    sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
+)
+
+avatar_model = Wav2LipWrapper(c_f)
 
 # 创建Player实例并启动
 loop = asyncio.new_event_loop()
 
+# llm_model = ChatOpenAI(
+#     model=QWEN_LLM_MODEL.model_id,
+#     api_key=QWEN_LLM_MODEL.api_key,
+#     base_url=QWEN_LLM_MODEL.api_base_url,
+# )
+llm_model = ChatOpenAI(
+    model=ONE_API_LLM_MODEL.model_id,
+    api_key=ONE_API_LLM_MODEL.api_key,
+    base_url=ONE_API_LLM_MODEL.api_base_url,
+)
+agent = SimpleAgent(llm_model)
+
+
 player = HumanPlayer(
     config=WAV2LIP_PLAYER_CONFIG,
-    model=model,
-    avatar=load_avatar(f),
+    agent=agent,
+    tts_model=tts_model,
+    avatar_model=avatar_model,
+    avatar=load_avatar(a_f),
     loop=loop,
-    audio_producer=soundfile_producer(s_f, fps=10)
 )
 
 # 存储已连接的客户端
@@ -46,13 +79,11 @@ async def websocket_handler(request):
     ws = web.WebSocketResponse()
     await ws.prepare(request)
 
-
     # 创建新的 RTCPeerConnection
     pc = RTCPeerConnection()
     client_id = id(pc)
     connected_clients.add(client_id)
     logging.info(f"客户端 {client_id} 已连接")
-
 
     # 处理 ICE 候选
     @pc.on("icecandidate")
@@ -76,8 +107,7 @@ async def websocket_handler(request):
         async for msg in ws:
             msg: WSMessage
             if msg.type == web.WSMsgType.TEXT:
-                data = json.loads(msg.data)
-
+                data = msg.json()
                 if data["type"] == "offer":
                     # 处理客户端的 offer
                     offer = RTCSessionDescription(sdp=data["sdp"], type="offer")
@@ -116,13 +146,6 @@ async def websocket_handler(request):
                     })
 
                     logging.info(f"向客户端 {client_id} 发送 answer")
-
-                # elif data["type"] == "candidate":
-                #     # 处理客户端的 ICE 候选
-                #     candidate = data["candidate"]
-                #     if candidate:
-                #         await pc.addIceCandidate(candidate)
-                #         logging.info(f"从客户端 {client_id} 收到 ICE 候选")
             elif msg.type == web.WSMsgType.ERROR:
                 logging.error(f"WebSocket 错误: {ws.exception()}")
 
@@ -138,12 +161,49 @@ async def websocket_handler(request):
     return ws
 
 
+# echo 接口
+async def echo(request):
+    data = await request.json()
+    text = data.get('text')
+    if text:
+        player.flush()
+        res_data = player.text_container.put_text_data(
+            Data(
+                data=text,
+                is_chat=False,
+            )
+        )
+        print(res_data)
+        return web.json_response({"status": "success", "data": res_data})
+    return web.json_response({"status": "error", "message": "Missing text parameter"}, status=400)
+
+
+# chat 接口
+async def chat(request):
+    data = await request.json()
+    question = data.get('question')
+    if question:
+        # player.flush()
+        res_data = player.text_container.put_text_data(
+            Data(
+                data=question,
+                is_chat=True,
+                stream=False,
+            )
+        )
+        print(res_data)
+        return web.json_response({"status": "success", "data": res_data})
+    return web.json_response({"status": "error", "message": "Missing question parameter"}, status=400)
+
+
 # 主函数
 def main():
     """启动 Web 服务器"""
     app = web.Application()
     app.router.add_get("/", index)
     app.router.add_get("/ws", websocket_handler)
+    app.router.add_post("/echo", echo)
+    app.router.add_post("/chat", chat)
 
     # 启动服务器
     runner = web.AppRunner(app)
@@ -156,7 +216,6 @@ def main():
 
     logging.info("服务器已启动，访问 http://localhost:8080")
     loop.run_forever()
-
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import logging
 import queue
 import threading
 import traceback
@@ -11,13 +12,164 @@ import torch
 from av import AudioFrame, VideoFrame
 from torch import nn
 
+from engine.agent.agents.base_agent import BaseAgent
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper
 from engine.human.player.track import StreamTrackSync
-from engine.human.utils.data import Data
+from engine.utils.data import Data
+from engine.human.voice.voice import TTSModelWrapper
 
 
-class AudioContainer:
+class Container:
+    def flush(self):
+        pass
+
+    def shutdown(self):
+        pass
+
+
+class TextContainer(Container):
+    def __init__(
+            self,
+            config: PlayerConfig,
+            agent: BaseAgent,
+            model: TTSModelWrapper,
+    ):
+        """
+        接收 text 数据, 如果是 chat 类型的文本, 先生成回答, 输出 audio
+        :param config:
+        :param agent:
+        :param model:
+        """
+        self.config = config
+        self.agent = agent
+        self.model = model
+
+        self._stop_event = threading.Event()
+
+        self.queue = queue.Queue()
+        self.audio_queue = queue.Queue()
+
+    def flush(self):
+        self.queue.queue.clear()
+        self.audio_queue.queue.clear()
+
+    def put_text_data(self, data: Data) -> Data:
+        text = data.get("data")
+        if text.startswith("fuck"):
+            # 处理特殊文本（例如违法规定的文字）, 直接返回错误, 不放入队列
+            return Data(
+                ok=False,
+                msg="fuck data",
+            )
+
+        self.queue.put(data)
+        return Data(
+            ok=True,
+        )
+
+    def _streaming_text_producer(self, text):
+        # todo, 先部分组装 text chunk, 然后自动切割, 并自动添加一些辅助信息, 如在读文本前 sleep 0.1s 等
+        # todo, 判断是否有文字, 没有文字需要继续等待下一个 chunk
+        for text_chunk in self.agent.stream_answer(text, use_rag=True):
+            if text_chunk is None or text_chunk == "":
+                continue
+            yield Data(
+                data=text_chunk,
+                is_stream=True,
+                is_final=False,
+            )
+        yield Data(
+            data="",
+            is_stream=True,
+            is_final=True,
+        )
+
+    def text_producer(self):
+        """
+        读取 text, 如果 chat 类型, 则通过 agent 产生流式输出
+        :return:
+        """
+        while not self._stop_event.is_set():
+            try:
+                text_data = self.queue.get(timeout=1)
+                text = text_data.get("data")
+                stream = text_data.get("stream")
+                if text is None or text == "":
+                    continue
+                is_chat = text_data.get("is_chat", False)
+
+                if is_chat:
+                    # 将data放入agent并进行回答
+                    if stream:
+                        for data in self._streaming_text_producer(text):
+                            yield data
+                    else:
+                        answer = self.agent.answer(text)
+                        yield Data(
+                            data=answer,
+                            is_stream=False,
+                            is_final=True,
+                        )
+                else:
+                    # 普通文本, 直接放入队列
+                    yield Data(
+                        data=text,
+                        is_stream=False,
+                        is_final=True,
+                    )
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"Text processing error: {e}")
+                traceback.print_exc()
+                break
+
+
+    def text_consumer(self, data: Data):
+        """
+         将文本或文本流, 转为音频
+         :return:
+         """
+        text = data.get("data")
+        is_stream = data.get("is_stream")
+        is_final = data.get("is_final")
+        logging.info("开始消费文本数据: %s, is_stream: %s, is_final: %s", text, is_stream, is_final)
+        if is_final and len(text) == 0:
+            return
+        if is_stream:
+            speech_data = self.model.streaming_inference(text)
+        else:
+            speech_data = self.model.inference(text)
+        audio_data = Data(
+            data=speech_data,
+            is_final=is_final,
+        )
+        self.audio_queue.put(audio_data)
+
+    def audio_producer(self):
+        """
+        进一步处理 audio, 如变声, 增强等
+        :return:
+        """
+        while not self._stop_event.is_set():
+            try:
+                audio_data = self.audio_queue.get(timeout=1)
+                # todo @zjh, 进一步处理音频
+
+                yield audio_data  # data, is_final
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"Audio processing error: {e}")
+                traceback.print_exc()
+                break
+
+    def shutdown(self):
+        self._stop_event.set()
+
+
+class AudioContainer(Container):
     def __init__(
             self,
             config: PlayerConfig,
@@ -42,12 +194,18 @@ class AudioContainer:
 
         self._stop_event = threading.Event()
 
-        self.queue = queue.Queue()
-        self.frame_queue = queue.Queue()
+        self.queue = queue.Queue(self.fps * 3)
+        self.frame_queue = queue.Queue(self.fps * 3)
         self.frame_batch = []
         self.frame_fragment = None
 
-    def consumer(self, data: Data):
+    def flush(self):
+        self.queue.queue.clear()
+        self.frame_queue.queue.clear()
+        self.frame_batch = []
+        self.frame_fragment = None
+
+    def audio_consumer(self, data: Data):
         is_final = data.get("is_final")
         speech_data = data.get("data")
         if self.frame_fragment is not None:
@@ -60,7 +218,9 @@ class AudioContainer:
                 self.frame_fragment = chunk
             else:
                 self.queue.put(chunk)
-        return data
+        self.frame_fragment = None
+
+        print(data)
 
     def _make_audio_frame(self, chunk):
         chunk = (chunk * 32767).astype(np.int16)
@@ -87,7 +247,7 @@ class AudioContainer:
             asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(frame), self.loop)
             self.frame_batch.append(chunk)
 
-    def producer(self):
+    def audio_feature_producer(self):
         self._warmup()
         while not self._stop_event.is_set():
             try:
@@ -114,7 +274,7 @@ class AudioContainer:
         self._stop_event.set()
 
 
-class VideoContainer:
+class VideoContainer(Container):
     def __init__(
             self,
             config: PlayerConfig,
@@ -158,7 +318,7 @@ class VideoContainer:
         frame = VideoFrame.from_ndarray(image, format="bgr24")
         return frame
 
-    def consumer(self, data: Data):
+    def audio_feature_consumer(self, data: Data):
         audio_feature_batch = data.get("data")
         silence = data.get("silence")
         if silence:
@@ -231,17 +391,17 @@ if __name__ == '__main__':
         loop=loop,
     )
 
-    from engine.human.voice.asr import soundfile_producer
+    from engine.human.voice import soundfile_producer
     from engine.utils.pipeline import Pipeline
 
     pipeline_audio = Pipeline(
         producer=soundfile_producer(s_f, fps=10),
-        consumer=audio_c.consumer,
+        consumer=audio_c.audio_consumer,
     )
 
     pipeline_video = Pipeline(
-        producer=audio_c.producer,
-        consumer=video_c.consumer,
+        producer=audio_c.audio_feature_producer,
+        consumer=video_c.audio_feature_consumer,
     )
 
     for pipe in [pipeline_audio, pipeline_video]:

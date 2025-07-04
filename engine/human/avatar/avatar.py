@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from engine.config import PlayerConfig
-from engine.human.utils.data import Data
+from engine.utils.data import Data
 
 
 class AvatarModelWrapper(nn.Module):
