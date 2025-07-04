@@ -14,8 +14,10 @@ from engine.config import PlayerConfig
 class StreamTrackSync:
     def __init__(self, config: PlayerConfig):
         self.fps = config.fps
-        self.audio_queue = asyncio.Queue(self.fps * 10)
-        self.video_queue = asyncio.Queue(self.fps * 10)
+        self.prefer = config.track_sync_prefer
+        self.lock = asyncio.Lock()
+        self.audio_queue = asyncio.Queue(self.fps * 3)
+        self.video_queue = asyncio.Queue(self.fps * 3)
 
     async def put_audio_frame(self, frame: AudioFrame):
         await self.audio_queue.put(frame)
