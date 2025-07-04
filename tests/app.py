@@ -9,7 +9,8 @@ from langchain_openai import ChatOpenAI
 from openai import AsyncOpenAI
 
 from engine.agent.agents.custom import KnowledgeAgent, SimpleAgent
-from engine.agent.vecdb.chroma import clean_db, create_db
+from engine.agent.tools.rag import RetrieverTool
+from engine.agent.vecdb.chroma import clean_db, create_db, load_db, try_load_db
 from engine.config import WAV2LIP_PLAYER_CONFIG, QWEN_LLM_MODEL, DEFAULT_PROJECT_CONFIG, ONE_API_LLM_MODEL
 from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
 from engine.human.player.player import HumanPlayer
@@ -22,17 +23,17 @@ from engine.utils.data import Data
 a_f = '../avatars/wav2lip256_avatar1'
 c_f = '../checkpoints/wav2lip.pth'
 
-# tts_model = AliTTSWrapper(
-#     model_str="cosyvoice-v1",
-#     api_key="sk-361f246a74c9421085d1d137038d5064",
-#     voice_type="longxiaochun",
-#     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
-# )
-
-tts_model = EdgeTTSWrapper(
-    voice_type="zh-CN-YunxiaNeural",
+tts_model = AliTTSWrapper(
+    model_str="cosyvoice-v1",
+    api_key="sk-361f246a74c9421085d1d137038d5064",
+    voice_type="longxiaochun",
     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
 )
+
+# tts_model = EdgeTTSWrapper(
+#     voice_type="zh-CN-YunxiaNeural",
+#     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
+# )
 
 avatar_model = Wav2LipWrapper(c_f)
 
@@ -49,8 +50,10 @@ llm_model = ChatOpenAI(
     api_key=ONE_API_LLM_MODEL.api_key,
     base_url=ONE_API_LLM_MODEL.api_base_url,
 )
-agent = SimpleAgent(llm_model)
+# agent = SimpleAgent(llm_model)
 
+vector_store = try_load_db(DEFAULT_PROJECT_CONFIG.vecdb_path, DEFAULT_PROJECT_CONFIG.docs_path)
+agent = KnowledgeAgent(llm_model, vector_store)
 
 player = HumanPlayer(
     config=WAV2LIP_PLAYER_CONFIG,
@@ -166,7 +169,6 @@ async def echo(request):
     data = await request.json()
     text = data.get('text')
     if text:
-        player.flush()
         res_data = player.text_container.put_text_data(
             Data(
                 data=text,
@@ -183,12 +185,10 @@ async def chat(request):
     data = await request.json()
     question = data.get('question')
     if question:
-        # player.flush()
         res_data = player.text_container.put_text_data(
             Data(
                 data=question,
                 is_chat=True,
-                stream=False,
             )
         )
         print(res_data)

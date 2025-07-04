@@ -4,6 +4,9 @@ from typing import Any
 
 
 class Data(dict):
+    def set(self, key: str, value: Any):
+        self[key] = value
+
     def __getattr__(self, key: str) -> Any:
         if key not in self:
             raise AttributeError(key)

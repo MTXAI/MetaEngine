@@ -1,7 +1,7 @@
 import os
 
 from engine.config import DEFAULT_RUNTIME_CONFIG
-from engine.utils.pool import ThreadPool
+from engine.utils.concurrent.pool import ThreadPool
 
 thread_pool = ThreadPool(
     max_workers=DEFAULT_RUNTIME_CONFIG.max_workers,

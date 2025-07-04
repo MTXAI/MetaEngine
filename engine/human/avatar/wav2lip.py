@@ -13,6 +13,7 @@ from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper
 from models.wav2lip.audio import melspectrogram
 from models.wav2lip import Wav2Lip
+from models.wav2lip.hparams import hparams
 
 
 def load_model(path):
@@ -66,7 +67,7 @@ class Wav2LipWrapper(AvatarModelWrapper):
         i = 0
         audio_feature_batch = []
         while i < batch_size:
-            start_idx = 0
+            start_idx = int(i * hparams.num_mels / config.fps)
             if start_idx + mel_step_size > len(mel[0]):
                 audio_feature_batch.append(mel[:, len(mel[0]) - mel_step_size:])
             else:

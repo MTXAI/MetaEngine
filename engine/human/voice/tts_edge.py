@@ -38,12 +38,13 @@ class EdgeTTSWrapper(TTSModelWrapper):
             raise e
 
     def streaming_inference(self, text):
-        # todo 实现 text 组装
-        return self.inference(text)
+        # return self.inference(text)
+        raise NotImplementedError()
 
     def inference(self, text):
         asyncio.new_event_loop().run_until_complete(self._communicating(text))
         speech = resample_sound(self.buffer, self.sample_rate)
         self.buffer.seek(0)
         self.buffer.truncate()
+        self.buffer.flush()
         return speech

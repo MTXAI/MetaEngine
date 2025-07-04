@@ -7,15 +7,15 @@ from langchain_openai import ChatOpenAI
 
 
 from engine.agent.agents.base_agent import BaseAgent
-from engine.agent.agents.custom.knowledge_agent import KnowledgeAgent
-from engine.agent.vecdb.chroma import clean_db, create_db
-from engine.config import PlayerConfig, QWEN_LLM_MODEL, DEFAULT_PROJECT_CONFIG
+from engine.config import PlayerConfig
 from engine.human.avatar.avatar import AvatarModelWrapper
+from engine.human.player.constant import StateReady
 from engine.human.player.container import AudioContainer, VideoContainer, TextContainer
+from engine.human.player.state import HumanState
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
 from engine.human.voice.voice import TTSModelWrapper
-from engine.utils.pipeline import Pipeline, TODOPipelineCallback
-from engine.utils.pool import TaskInfo
+from engine.utils.concurrent.pipeline import Pipeline, TODOPipelineCallback
+from engine.utils.concurrent.pool import TaskInfo
 from engine.runtime import thread_pool
 
 
@@ -39,18 +39,23 @@ class HumanPlayer:
             config,
             self.track_sync,
         )
+        shared_state = HumanState(state=StateReady)
+        self.state = shared_state
         self.text_container = TextContainer(
+            shared_state,
             config,
             agent,
             tts_model
         )
         self.audio_container = AudioContainer(
+            shared_state,
             config,
             avatar_model,
             self.track_sync,
             loop
         )
         self.video_container = VideoContainer(
+            shared_state,
             config,
             avatar_model,
             avatar,
@@ -65,12 +70,6 @@ class HumanPlayer:
         self.loop = loop
         pipeline_callback = TODOPipelineCallback()
         self.pipelines = [
-            Pipeline(
-                name="TextPipeline",
-                producer=self.text_container.text_producer,
-                consumer=self.text_container.text_consumer,
-                callback=pipeline_callback,
-            ),
             Pipeline(
                 name="AudioPipeline",
                 producer=self.text_container.audio_producer,
@@ -122,7 +121,10 @@ if __name__ == '__main__':
     from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
     from engine.utils.data import Data
     from engine.human.voice.tts_edge import EdgeTTSWrapper
+    from engine.config import QWEN_LLM_MODEL, ONE_API_LLM_MODEL
     from engine.human.voice.tts_ali import AliTTSWrapper
+    from engine.agent.vecdb.chroma import try_load_db
+    from engine.agent.agents.custom import KnowledgeAgent, SimpleAgent
 
     a_f = '../../../avatars/wav2lip256_avatar1'
     s_f = '../../../tests/test_datas/asr.wav'
@@ -131,33 +133,33 @@ if __name__ == '__main__':
     # 创建Player实例并启动
     loop = asyncio.new_event_loop()
 
-    tts_model = AliTTSWrapper(
-        model_str="cosyvoice-v1",
-        api_key="sk-361f246a74c9421085d1d137038d5064",
-        voice_type="longxiaochun",
-        sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
-    )
-
-    # tts_model = EdgeTTSWrapper(
-    #     voice_type="zh-CN-YunxiaNeural",
+    # tts_model = AliTTSWrapper(
+    #     model_str="cosyvoice-v1",
+    #     api_key="sk-361f246a74c9421085d1d137038d5064",
+    #     voice_type="longxiaochun",
     #     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
     # )
-    avatar_model = Wav2LipWrapper(c_f)
-    # agent = AsyncOpenAI(
-    #     # one api 生成的令牌
-    #     api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
-    #     base_url="http://localhost:3000/v1"
-    # )
-    model = ChatOpenAI(
-        model=QWEN_LLM_MODEL.model_id,
-        api_key=QWEN_LLM_MODEL.api_key,
-        base_url=QWEN_LLM_MODEL.api_base_url,
+    tts_model = EdgeTTSWrapper(
+        voice_type="zh-CN-YunxiaNeural",
+        sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
     )
-    vecdb_path = DEFAULT_PROJECT_CONFIG.vecdb_path
-    docs_path = DEFAULT_PROJECT_CONFIG.docs_path
-    clean_db(vecdb_path)
-    vector_store = create_db(vecdb_path, docs_path)
-    agent = KnowledgeAgent(model, vector_store)
+    avatar_model = Wav2LipWrapper(c_f)
+
+    # llm_model = ChatOpenAI(
+    #     model=QWEN_LLM_MODEL.model_id,
+    #     api_key=QWEN_LLM_MODEL.api_key,
+    #     base_url=QWEN_LLM_MODEL.api_base_url,
+    # )
+    llm_model = ChatOpenAI(
+        model=ONE_API_LLM_MODEL.model_id,
+        api_key=ONE_API_LLM_MODEL.api_key,
+        base_url=ONE_API_LLM_MODEL.api_base_url,
+    )
+    agent = SimpleAgent(llm_model)
+
+    # vector_store = try_load_db(DEFAULT_PROJECT_CONFIG.vecdb_path, DEFAULT_PROJECT_CONFIG.docs_path)
+    # agent = KnowledgeAgent(llm_model, vector_store)
+
     player = HumanPlayer(
         config=WAV2LIP_PLAYER_CONFIG,
         agent=agent,
@@ -198,16 +200,16 @@ if __name__ == '__main__':
                 counttime = 0
 
     async def put_text_data():
-        await asyncio.sleep(1)
-        player.flush()
-        res_data = player.text_container.put_text_data(Data(
-            data="你好, 我是墨菲",
-            is_chat=False,
-        ))
-        print(res_data)
+        for i in range(3):
+            res_data = player.text_container.put_text_data(Data(
+                data="你好, 我是墨菲",
+                is_chat=False,
+            ))
+            print(res_data)
+            time.sleep(5)
 
-    # asyncio.run_coroutine_threadsafe(listen_audio(), loop=loop)
-    # asyncio.run_coroutine_threadsafe(listen_video(), loop=loop)
+    asyncio.run_coroutine_threadsafe(listen_audio(), loop=loop)
+    asyncio.run_coroutine_threadsafe(listen_video(), loop=loop)
     asyncio.run_coroutine_threadsafe(put_text_data(), loop=loop)
     asyncio.set_event_loop(loop)
     loop.run_forever()
