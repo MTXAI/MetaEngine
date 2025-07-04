@@ -29,7 +29,7 @@ DEFAULT_PROJECT_CONFIG = ProjectConfig(
         app_log_path=_default_app_log_path,
         app_log_file=_default_app_log_file,
         vecdb_path=_default_vecdb_path,
-        docs_path=_default_vecdb_path,
+        docs_path=_default_docs_path,
     )
 )
 

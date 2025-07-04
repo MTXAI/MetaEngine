@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import logging
 import queue
 import threading
 import traceback
@@ -9,7 +10,6 @@ import cv2
 import numpy as np
 import torch
 from av import AudioFrame, VideoFrame
-from openai import AsyncOpenAI
 from torch import nn
 from typing_inspection.typing_objects import is_final
 
@@ -58,28 +58,17 @@ class TextContainer(Container):
 
     def put_text_data(self, data: Data) -> Data:
         text = data.get("data")
-        is_chat = data.get("is_chat")
-        try:
-            if is_chat:
-                # 将data放入agent并进行回答
-                loop = asyncio.get_event_loop()
-                async def handle_async():
-                    async for chunk in await self.agent.stream_answer(text):
-                        print(chunk)
-                        self.queue.put(Data(data=chunk, is_chat=True))
-                    self.queue.put(Data(is_final=True))
-
-                loop.run_until_complete(handle_async())
-            else:
-                # 普通文本, 直接放入队列
-                self.queue.put(Data(data=text, is_chat=False, is_final=True))
-        except Exception as e:
-            print(f"Error in agent processing: {e}")
+        if text.startswith("fuck"):
+            # 处理特殊文本（例如违法规定的文字）, 直接返回错误, 不放入队列
             return Data(
                 ok=False,
-                msg=str(e),
+                msg="fuck data",
             )
-        return Data(ok=True)
+
+        self.queue.put(data)
+        return Data(
+            ok=True,
+        )
 
     def text_producer(self):
         """
@@ -90,28 +79,31 @@ class TextContainer(Container):
             try:
                 text_data = self.queue.get(timeout=1)
                 text = text_data.get("data")
+                if text is None or text == "":
+                    continue
                 is_chat = text_data.get("is_chat", False)
-                if not is_chat:
-                    # echo
+                if is_chat:
+                    # 将data放入agent并进行回答
+                    for chunk in self.agent.stream_answer(text):
+                        if chunk.content is None or chunk.content == "":
+                            continue
+                        yield Data(
+                            data=chunk.content,
+                            is_stream=True,
+                            is_final=False,
+                        )
+                    yield Data(
+                        data="",
+                        is_stream=False,
+                        is_final=True,
+                    )
+
+                else:
+                    # 普通文本, 直接放入队列
                     yield Data(
                         data=text,
                         is_stream=False,
                         is_final=True,
-                    )
-                else:
-                    # chat
-                    is_final = text_data.get("is_final", False)
-                    if is_final:
-                        # 最后发送一个标记数据, 代表是最后一个
-                        yield Data(
-                            data="",
-                            is_stream=True,
-                            is_final=True,
-                        )
-                    yield Data(
-                        data=text,
-                        is_stream=True,
-                        is_final=False,
                     )
             except queue.Empty:
                 continue
@@ -129,6 +121,7 @@ class TextContainer(Container):
         text = data.get("data")
         is_stream = data.get("is_stream")
         is_final = data.get("is_final")
+        logging.info("开始消费文本数据: %s, is_stream: %s, is_final: %s", text, is_stream, is_final)
         if is_final and len(text) == 0:
             return
         if is_stream:

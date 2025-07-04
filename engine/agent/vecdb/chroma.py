@@ -24,7 +24,7 @@ def load_db(db_path: os.PathLike):
         logging.warning(f"Database {db_path} does not exist.")
         return None
 
-def create_db(db_path: os.PathLike, doc_dir : str):
+def create_db(db_path: os.PathLike, doc_dir : os.PathLike):
     # load file in dir
     source_docs = []
     for file in os.listdir(doc_dir):

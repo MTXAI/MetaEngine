@@ -5,9 +5,12 @@ import traceback
 
 from aiohttp import web, WSMessage
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
+from langchain_openai import ChatOpenAI
 from openai import AsyncOpenAI
 
-from engine.config import WAV2LIP_PLAYER_CONFIG
+from engine.agent.agents.custom.agents import KnowledgeAgent
+from engine.agent.vecdb.chroma import clean_db, create_db
+from engine.config import WAV2LIP_PLAYER_CONFIG, QWEN_LLM_MODEL, DEFAULT_PROJECT_CONFIG
 from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
 from engine.human.player.player import HumanPlayer
 from engine.human.voice import soundfile_producer
@@ -36,11 +39,21 @@ avatar_model = Wav2LipWrapper(c_f)
 # 创建Player实例并启动
 loop = asyncio.new_event_loop()
 
-agent = AsyncOpenAI(
-    # one api 生成的令牌
-    api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
-    base_url="http://localhost:3000/v1"
-)
+# agent = AsyncOpenAI(
+#     # one api 生成的令牌
+#     api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
+#     base_url="http://localhost:3000/v1"
+# )
+model = ChatOpenAI(
+        model=QWEN_LLM_MODEL.model_id,
+        api_key=QWEN_LLM_MODEL.api_key,
+        base_url=QWEN_LLM_MODEL.api_base_url,
+    )
+vecdb_path = DEFAULT_PROJECT_CONFIG.vecdb_path
+docs_path = DEFAULT_PROJECT_CONFIG.docs_path
+clean_db(vecdb_path)
+vector_store = create_db(vecdb_path, docs_path)
+agent = KnowledgeAgent(model, vector_store)
 
 
 player = HumanPlayer(

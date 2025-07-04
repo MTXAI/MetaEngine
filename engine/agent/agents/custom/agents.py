@@ -19,7 +19,10 @@ class KnowledgeAgent(BaseAgent):
         return "\n".join([d.page_content for d in docs])
 
     def _web_search(self, query: str) -> str:
-        return self.search_wrapper.run(query)
+        try:
+            return self.search_wrapper.run(query)
+        except Exception:
+            return ""
 
     def _build_prompt(self, question: str, rag: str, web: str, chat_history: str) -> str:
         prompt = f"""
