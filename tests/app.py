@@ -23,17 +23,17 @@ from engine.utils.data import Data
 a_f = '../avatars/wav2lip256_avatar1'
 c_f = '../checkpoints/wav2lip.pth'
 
-tts_model = AliTTSWrapper(
-    model_str="cosyvoice-v1",
-    api_key="sk-361f246a74c9421085d1d137038d5064",
-    voice_type="longxiaochun",
-    sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
-)
-
-# tts_model = EdgeTTSWrapper(
-#     voice_type="zh-CN-YunxiaNeural",
+# tts_model = AliTTSWrapper(
+#     model_str="cosyvoice-v1",
+#     api_key="sk-361f246a74c9421085d1d137038d5064",
+#     voice_type="longxiaochun",
 #     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
 # )
+
+tts_model = EdgeTTSWrapper(
+    voice_type="zh-CN-YunxiaNeural",
+    sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
+)
 
 avatar_model = Wav2LipWrapper(c_f)
 

@@ -4,9 +4,14 @@ langchain
 langchain_openai
 langchain-core
 langchain-experimental
+langchain-chroma
+langchain-openai
+langchain-huggingface
+langchain-unstructured
+duckduckgo-search
 chromadb
 numpy==1.26.4
-rich=13.9.4
+rich==13.9.4
 jieba
 datasets==2.21.0
 modelscope
@@ -23,10 +28,6 @@ av
 soundfile
 sounddevice
 openmim
-mmengine
-mmcv==2.0.1
-mmdet==3.1.0
-mmpose==1.1.0
 gdown
 face-alignment
 edge_tts

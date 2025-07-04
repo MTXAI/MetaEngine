@@ -231,6 +231,7 @@ class AudioContainer(Container):
                     data=audio_feature_batch,
                     silence=silence,
                 )
+                print(f"Produce audio feature")
 
             except Exception as e:
                 print(f"Audio processing error: {e}")

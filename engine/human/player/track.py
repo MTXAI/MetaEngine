@@ -25,13 +25,13 @@ class StreamTrackSync:
         self.video_queue.clear()
 
     async def put_audio_frame(self, frame: AudioFrame):
-        # if self.prefer == 'video':
-        #     await self.video_queue.wait_for_data()
+        if self.prefer == 'video':
+            await self.video_queue.wait_for_data()
         await self.audio_queue.put(frame)
 
     async def put_video_frame(self, frame: VideoFrame):
-        # if self.prefer == 'audio':
-        #     await self.audio_queue.wait_for_data()
+        if self.prefer == 'audio':
+            await self.audio_queue.wait_for_data()
         await self.video_queue.put(frame)
 
     async def get_audio_frame(self) -> AudioFrame:
