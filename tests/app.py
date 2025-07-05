@@ -169,6 +169,7 @@ async def echo(request):
     data = await request.json()
     text = data.get('text')
     if text:
+        player.flush()
         res_data = player.text_container.put_text_data(
             Data(
                 data=text,
@@ -185,6 +186,7 @@ async def chat(request):
     data = await request.json()
     question = data.get('question')
     if question:
+        player.flush()
         res_data = player.text_container.put_text_data(
             Data(
                 data=question,

@@ -32,7 +32,7 @@ class Container:
         return self.state.swap_state(old_state, new_state)
 
     def set_state(self, state: int):
-        # print(f"{self.state.get_state()} -> {state}")
+        print(f"{self.state.get_state()} -> {state}")
         self.state.set_state(state)
 
     def get_state(self):
@@ -159,7 +159,6 @@ class AudioContainer(Container):
         self.frame_batch = []
         self._warmup()
         self.frame_fragment = None
-        self.track_sync.flush()
 
     def audio_consumer(self, data: Data):
         self.flush()
@@ -218,7 +217,6 @@ class AudioContainer(Container):
                     self.frame_batch.append(chunk)
                     if state == 1:
                         silence = False
-
                 try:
                     audio_feature_batch = self.model.encode_audio_feature(self.frame_batch, self.config)
                 except Exception as e:
@@ -231,8 +229,6 @@ class AudioContainer(Container):
                     data=audio_feature_batch,
                     silence=silence,
                 )
-                print(f"Produce audio feature")
-
             except Exception as e:
                 print(f"Audio processing error: {e}")
                 traceback.print_exc()
@@ -280,9 +276,11 @@ class VideoContainer(Container):
 
     def _update_index(self, n):
         self.frame_index += n
+        if self._mirror_index(self.frame_index) == 0:
+            self.frame_index = 0
 
     def _make_video_frame(self, image):
-        image[0, :] &= 0xFE  # 确保第一行是偶数，避免某些视频问题
+        # image[0, :] &= 0xFE  # 确保第一行是偶数，避免某些视频问题
         frame = VideoFrame.from_ndarray(image, format="bgr24")
         return frame
 

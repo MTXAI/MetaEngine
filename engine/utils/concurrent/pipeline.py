@@ -53,6 +53,9 @@ class Pipeline:
         self._produce_event = threading.Event()
         self._consume_event = threading.Event()
 
+    def flush(self):
+        self.queue.queue.clear()
+
     def produce_worker(self):
         try:
             for data in self.producer():
@@ -112,6 +115,14 @@ class AsyncPipeline:
         self.queue = asyncio.Queue()
         self.timeout = timeout
         self._stop_event = asyncio.Event()
+
+    def flush(self):
+        while not self.queue.empty():
+            try:
+                self.queue.get_nowait()
+                self.queue.task_done()  # 如果使用了 join()，需要标记任务完成
+            except asyncio.QueueEmpty:
+                break
 
     async def produce_worker(self):
         try:

@@ -30,7 +30,9 @@ class HumanPlayer:
             loop: asyncio.AbstractEventLoop,
     ):
         self.config = config
-        self.track_sync = StreamTrackSync(config)
+        self.track_sync = StreamTrackSync(
+            config,
+        )
         self.audio_track = AudioStreamTrack(
             config,
             self.track_sync,
@@ -89,6 +91,9 @@ class HumanPlayer:
     def flush(self):
         for container in self.containers:
             container.flush()
+        for pipeline in self.pipelines:
+            pipeline.flush()
+        self.track_sync.flush()
 
     def start(self):
         if self._start:
