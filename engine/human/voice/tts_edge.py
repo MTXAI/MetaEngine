@@ -2,15 +2,10 @@ import asyncio
 import io
 import traceback
 
-import dashscope
 import edge_tts
-import numpy as np
-import soundfile
-from dashscope.audio.tts_v2 import *
-from edge_tts.typing import TTSChunk
 
-from engine.utils.sound import resample_sound
 from engine.human.voice.voice import TTSModelWrapper
+from engine.utils.sound import resample_sound
 
 
 class EdgeTTSWrapper(TTSModelWrapper):

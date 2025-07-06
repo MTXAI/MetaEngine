@@ -4,9 +4,9 @@ import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from queue import Queue, Full
 
 from engine.utils.common import EasyDict
+from queue import Queue, Full
 
 
 class TaskCallback:

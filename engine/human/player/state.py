@@ -1,5 +1,3 @@
-import threading
-
 from engine.utils.concurrent.lock import RWLock
 
 

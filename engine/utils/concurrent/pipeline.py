@@ -1,12 +1,10 @@
 import asyncio
-import logging
-import queue
 import threading
 import traceback
-from queue import Queue
 from typing import Callable, Tuple, Union, List
 
-from engine.utils.data import Data
+import queue
+from queue import Queue
 
 
 class PipelineCallback:

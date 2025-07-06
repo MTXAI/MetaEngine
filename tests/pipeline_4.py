@@ -6,10 +6,9 @@ from pathlib import Path
 import dashscope
 import pyaudio
 from dashscope.audio.tts_v2 import *
-from funasr import AutoModel
-
 from engine.utils.pipeline import AsyncPipeline, AsyncBridgeConsumer, PipelineCallback, \
     AsyncConsumerFactory
+from funasr import AutoModel
 
 # 若没有将API Key配置到环境变量中，需将下面这行代码注释放开，并将apiKey替换为自己的API Key
 dashscope.api_key = "sk-361f246a74c9421085d1d137038d5064"

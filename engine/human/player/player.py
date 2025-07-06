@@ -1,10 +1,8 @@
 import asyncio
-import queue
 import time
-from typing import Tuple, Callable
+from typing import Tuple
 
 from langchain_openai import ChatOpenAI
-
 
 from engine.agent.agents.base_agent import BaseAgent
 from engine.config import PlayerConfig
@@ -13,8 +11,8 @@ from engine.human.player.container import HumanContainer
 from engine.human.player.state import *
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
 from engine.human.voice.voice import TTSModelWrapper
-from engine.utils.concurrent.pool import TaskInfo
 from engine.runtime import thread_pool
+from engine.utils.concurrent.pool import TaskInfo
 
 
 class HumanPlayer:
@@ -86,11 +84,9 @@ if __name__ == '__main__':
     from engine.config import WAV2LIP_PLAYER_CONFIG
     from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
     from engine.utils.data import Data
-    from engine.human.voice.tts_edge import EdgeTTSWrapper
-    from engine.config import QWEN_LLM_MODEL, ONE_API_LLM_MODEL
+    from engine.config import ONE_API_LLM_MODEL
     from engine.human.voice.tts_ali import AliTTSWrapper
-    from engine.agent.vecdb.chroma import try_load_db
-    from engine.agent.agents.custom import KnowledgeAgent, SimpleAgent
+    from engine.agent.agents.custom import SimpleAgent
 
     a_f = '../../../avatars/wav2lip256_avatar1'
     s_f = '../../../tests/test_datas/asr.wav'

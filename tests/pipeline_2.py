@@ -3,9 +3,8 @@
 import asyncio
 from pathlib import Path
 
-from funasr import AutoModel
-
 from engine.utils.pipeline import AsyncPipeline, AsyncConsumerFactory
+from funasr import AutoModel
 
 # chunk_size = [0, 10, 5] #[0, 10, 5] 600ms, [0, 8, 4] 480ms
 chunk_size = [0, 100, 50]

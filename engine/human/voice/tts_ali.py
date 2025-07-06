@@ -1,14 +1,11 @@
-import asyncio
 import io
 import traceback
 
 import dashscope
-import numpy as np
-import soundfile
 from dashscope.audio.tts_v2 import *
 
-from engine.utils.sound import resample_sound
 from engine.human.voice.voice import TTSModelWrapper
+from engine.utils.sound import resample_sound
 
 
 class AliTTSCallback(ResultCallback):

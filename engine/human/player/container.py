@@ -16,8 +16,8 @@ from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper
 from engine.human.player.state import *
 from engine.human.player.track import StreamTrackSync
-from engine.utils.data import Data
 from engine.human.voice.voice import TTSModelWrapper
+from engine.utils.data import Data
 
 
 class HumanContainer:
