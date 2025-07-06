@@ -13,6 +13,7 @@ from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper
 from models.wav2lip.audio import melspectrogram
 from models.wav2lip import Wav2Lip
+from models.wav2lip.hparams import hparams
 
 
 def load_model(path):
@@ -58,11 +59,12 @@ class Wav2LipWrapper(AvatarModelWrapper):
         self.model = load_model(path)
 
     def encode_audio_feature(self, frame_batch: List[np.array], config: PlayerConfig):
+        # expect 5120
         frames = np.concatenate(frame_batch)
         mel = melspectrogram(frames)
 
         batch_size = config.batch_size
-        mel_step_size = batch_size
+        mel_step_size = 16
         i = 0
         audio_feature_batch = []
         while i < batch_size:
@@ -75,6 +77,7 @@ class Wav2LipWrapper(AvatarModelWrapper):
         return audio_feature_batch
 
     def inference(self, audio_feature_batch: torch.Tensor, face_img_batch: torch.Tensor, config: PlayerConfig):
+        # expect torch.Size([16, 80, 16]) torch.Size([16, 256, 256, 3])
         face_img_masked = face_img_batch.clone()
         face_img_masked[:, face_img_batch[0].shape[0] // 2:] = 0
         face_img_batch = torch.cat((face_img_masked, face_img_batch), dim=3) / 255.

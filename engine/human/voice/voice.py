@@ -8,7 +8,7 @@ class TTSModelWrapper(nn.Module):
         :param text:
         :return:
         """
-        pass
+        raise NotImplementedError()
 
     def inference(self, text):
         """

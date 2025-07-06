@@ -62,12 +62,13 @@ class AliTTSWrapper(TTSModelWrapper):
                 raise e
 
     def streaming_inference(self, text):
-        asyncio.new_event_loop().run_until_complete(self._streaming_call(text))
-        speech = resample_sound(self.buffer, self.sample_rate)
-        self.buffer.seek(0)
-        self.buffer.truncate()
-        self.buffer.flush()
-        return speech
+        # asyncio.new_event_loop().run_until_complete(self._streaming_call(text))
+        # speech = resample_sound(self.buffer, self.sample_rate)
+        # self.buffer.seek(0)
+        # self.buffer.truncate()
+        # self.buffer.flush()
+        # return speech
+        raise NotImplementedError()
 
     def inference(self, text):
         for _ in range(self.retry_count):

@@ -81,25 +81,25 @@ class PlayerConfig(EasyConfig):
     fps: int
     sample_rate: int
     batch_size: int
-    warmup_iters: int
     timeout: float
     audio_ptime: float
     video_ptime: float
+    frame_multiple: int
     video_clock_rate: int
     track_sync_prefer: str
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-fps = 50.
+frame_multiple = 1
 WAV2LIP_PLAYER_CONFIG = PlayerConfig(
     dict(
-        fps=int(fps),
+        fps=50,  # must be 50
         sample_rate=16000,
         batch_size=16,
-        warmup_iters=16,
-        timeout=1/fps/2,
-        audio_ptime=1/fps,
-        video_ptime=1/fps,
+        timeout=1/50./2,
+        audio_ptime=1/50.,
+        video_ptime=1/50.*frame_multiple,  # 一渲染二
+        frame_multiple=frame_multiple,
         video_clock_rate=90000,
         track_sync_prefer='audio',
     )

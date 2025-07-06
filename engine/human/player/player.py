@@ -7,15 +7,13 @@ from langchain_openai import ChatOpenAI
 
 
 from engine.agent.agents.base_agent import BaseAgent
-from engine.agent.agents.custom.knowledge_agent import KnowledgeAgent
-from engine.agent.vecdb.chroma import clean_db, create_db
-from engine.config import PlayerConfig, QWEN_LLM_MODEL, DEFAULT_PROJECT_CONFIG
+from engine.config import PlayerConfig
 from engine.human.avatar.avatar import AvatarModelWrapper
-from engine.human.player.container import AudioContainer, VideoContainer, TextContainer
+from engine.human.player.container import HumanContainer
+from engine.human.player.state import *
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
 from engine.human.voice.voice import TTSModelWrapper
-from engine.utils.pipeline import Pipeline, TODOPipelineCallback
-from engine.utils.pool import TaskInfo
+from engine.utils.concurrent.pool import TaskInfo
 from engine.runtime import thread_pool
 
 
@@ -30,7 +28,9 @@ class HumanPlayer:
             loop: asyncio.AbstractEventLoop,
     ):
         self.config = config
-        self.track_sync = StreamTrackSync(config)
+        self.track_sync = StreamTrackSync(
+            config,
+        )
         self.audio_track = AudioStreamTrack(
             config,
             self.track_sync,
@@ -39,81 +39,46 @@ class HumanPlayer:
             config,
             self.track_sync,
         )
-        self.text_container = TextContainer(
+        shared_state = HumanState(state=StateReady)
+        self.state = shared_state
+        self.container = HumanContainer(
             config,
             agent,
-            tts_model
-        )
-        self.audio_container = AudioContainer(
-            config,
-            avatar_model,
-            self.track_sync,
-            loop
-        )
-        self.video_container = VideoContainer(
-            config,
+            tts_model,
             avatar_model,
             avatar,
             self.track_sync,
-            loop
+            loop,
         )
-        self.containers = [
-            self.text_container,
-            self.audio_container,
-            self.video_container,
-        ]
         self.loop = loop
-        pipeline_callback = TODOPipelineCallback()
-        self.pipelines = [
-            Pipeline(
-                name="TextPipeline",
-                producer=self.text_container.text_producer,
-                consumer=self.text_container.text_consumer,
-                callback=pipeline_callback,
-            ),
-            Pipeline(
-                name="AudioPipeline",
-                producer=self.text_container.audio_producer,
-                consumer=self.audio_container.audio_consumer,
-                callback=pipeline_callback,
-            ),
-            Pipeline(
-                name="VideoPipeline",
-                producer=self.audio_container.audio_feature_producer,
-                consumer=self.video_container.audio_feature_consumer,
-                callback=pipeline_callback,
-            )
-        ]
         self._start = False
         self._speaking = False
 
+    def busy(self):
+        return self.container.get_state() == StateBusy
+
     def flush(self):
-        for container in self.containers:
-            container.flush()
+        self.container.flush()
 
     def start(self):
         if self._start:
             return
-        for i, pipe in enumerate(self.pipelines):
-            thread_pool.submit(
-                pipe.produce_worker,
-                task_info=TaskInfo(
-                    name=f"{i}_produce_worker"
-                )
+        thread_pool.submit(
+            self.container.process_text_data_worker,
+            task_info=TaskInfo(
+                name=f"container.process_text_data_worker"
             )
-            thread_pool.submit(
-                pipe.consume_worker,
-                task_info=TaskInfo(
-                    name=f"{i}_consume_worker"
-                )
+        )
+        thread_pool.submit(
+            self.container.process_audio_data_worker,
+            task_info=TaskInfo(
+                name=f"container.process_audio_data_worker"
             )
+        )
         self._start = True
 
     def shutdown(self):
-        for container in self.containers:
-            container.shutdown()
-        for pipe in self.pipelines:
-            pipe.shutdown()
+        self.container.shutdown()
 
 
 if __name__ == '__main__':
@@ -122,7 +87,10 @@ if __name__ == '__main__':
     from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
     from engine.utils.data import Data
     from engine.human.voice.tts_edge import EdgeTTSWrapper
+    from engine.config import QWEN_LLM_MODEL, ONE_API_LLM_MODEL
     from engine.human.voice.tts_ali import AliTTSWrapper
+    from engine.agent.vecdb.chroma import try_load_db
+    from engine.agent.agents.custom import KnowledgeAgent, SimpleAgent
 
     a_f = '../../../avatars/wav2lip256_avatar1'
     s_f = '../../../tests/test_datas/asr.wav'
@@ -137,27 +105,27 @@ if __name__ == '__main__':
         voice_type="longxiaochun",
         sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
     )
-
     # tts_model = EdgeTTSWrapper(
     #     voice_type="zh-CN-YunxiaNeural",
     #     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
     # )
     avatar_model = Wav2LipWrapper(c_f)
-    # agent = AsyncOpenAI(
-    #     # one api 生成的令牌
-    #     api_key="sk-A3DJFMPvXa7Ot9faF4882708Aa2b419c87A50fFe8223B297",
-    #     base_url="http://localhost:3000/v1"
+
+    # llm_model = ChatOpenAI(
+    #     model=QWEN_LLM_MODEL.model_id,
+    #     api_key=QWEN_LLM_MODEL.api_key,
+    #     base_url=QWEN_LLM_MODEL.api_base_url,
     # )
-    model = ChatOpenAI(
-        model=QWEN_LLM_MODEL.model_id,
-        api_key=QWEN_LLM_MODEL.api_key,
-        base_url=QWEN_LLM_MODEL.api_base_url,
+    llm_model = ChatOpenAI(
+        model=ONE_API_LLM_MODEL.model_id,
+        api_key=ONE_API_LLM_MODEL.api_key,
+        base_url=ONE_API_LLM_MODEL.api_base_url,
     )
-    vecdb_path = DEFAULT_PROJECT_CONFIG.vecdb_path
-    docs_path = DEFAULT_PROJECT_CONFIG.docs_path
-    clean_db(vecdb_path)
-    vector_store = create_db(vecdb_path, docs_path)
-    agent = KnowledgeAgent(model, vector_store)
+    agent = SimpleAgent(llm_model)
+
+    # vector_store = try_load_db(DEFAULT_PROJECT_CONFIG.vecdb_path, DEFAULT_PROJECT_CONFIG.docs_path)
+    # agent = KnowledgeAgent(llm_model, vector_store)
+
     player = HumanPlayer(
         config=WAV2LIP_PLAYER_CONFIG,
         agent=agent,
@@ -198,16 +166,17 @@ if __name__ == '__main__':
                 counttime = 0
 
     async def put_text_data():
-        await asyncio.sleep(1)
-        player.flush()
-        res_data = player.text_container.put_text_data(Data(
-            data="你好, 我是墨菲",
-            is_chat=False,
-        ))
-        print(res_data)
+        for i in range(1):
+            player.flush()
+            res_data = player.container.put_text_data(Data(
+                data="介绍故宫",
+                is_chat=True,
+            ))
+            print(res_data)
+            time.sleep(5)
 
-    # asyncio.run_coroutine_threadsafe(listen_audio(), loop=loop)
-    # asyncio.run_coroutine_threadsafe(listen_video(), loop=loop)
+    asyncio.run_coroutine_threadsafe(listen_audio(), loop=loop)
+    asyncio.run_coroutine_threadsafe(listen_video(), loop=loop)
     asyncio.run_coroutine_threadsafe(put_text_data(), loop=loop)
     asyncio.set_event_loop(loop)
     loop.run_forever()

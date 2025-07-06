@@ -11,6 +11,13 @@ from transformers import AutoTokenizer
 from engine.agent.file_rag.file_loader import is_supported_file, load_file
 
 
+def try_load_db(db_path: os.PathLike, doc_dir: os.PathLike=None):
+    vector_store = load_db(db_path)
+    if vector_store is None and doc_dir is None:
+        return create_db(db_path, doc_dir)
+    return vector_store
+
+
 def load_db(db_path: os.PathLike):
     """
     Load the ChromaDB vector store from the specified database path.
@@ -25,7 +32,16 @@ def load_db(db_path: os.PathLike):
         logging.warning(f"Database {db_path} does not exist.")
         return None
 
-def create_db(db_path: os.PathLike, doc_dir : os.PathLike):
+
+def create_db(db_path: os.PathLike, doc_dir : os.PathLike, force: bool=False):
+    if not force:
+        if os.path.exists(db_path) and len(os.listdir(db_path)) > 0:
+            logging.warning(f"Database {db_path} has exist.")
+            return load_db(db_path)
+    else:
+        clean_db(db_path)
+        logging.warning(f"Database {db_path} has exist, will force create it.")
+
     # load file in dir
     source_docs = []
     for file in os.listdir(doc_dir):
