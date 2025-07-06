@@ -64,31 +64,36 @@ class HumanContainer:
         self.frame_count = len(self.frame_list_cycle)
 
     def swap_state(self, old_state: int, new_state: int):
-        print(f"{state_str[self.state.get_state()]}, {state_str[old_state]} -> {state_str[new_state]}")
-        return self.state.swap_state(old_state, new_state)
+        res = self.state.swap_state(old_state, new_state)
+        if res:
+            print(f"swap: {state_str[old_state]} -> {state_str[new_state]}")
+        return res
 
     def set_state(self, state: int):
-        print(f"{state_str[self.state.get_state()]} -> {state_str[state]}")
+        print(f"set:  {state_str[self.state.get_state()]} -> {state_str[state]}")
         self.state.set_state(state)
 
     def get_state(self):
          return self.state.get_state()
 
     def flush(self):
+        # 如果非强制, 则只在 ready 状态下中止
         self.set_state(StatePause)
         self.text_queue.queue.clear()
         self.audio_queue.queue.clear()
         self.audio_chunk_batch = []
         self.audio_data_fragment = None
+        # 完成 flush 操作后, 切换到 ready 状态
         self.set_state(StateReady)
 
     def put_text_data(self, data: Data):
         # human busy
-        if not self.swap_state(StateReady, StateBusy):
+        if self.get_state() != StateReady and self.get_state() != StateSpeaking:
             return Data(
                 ok=False,
-                msg="human busy"
+                msg=f"human state is {state_str[self.get_state()]}",
             )
+        self.set_state(StateBusy)
 
         # 文字预处理操作
         text = data.get("data")
@@ -157,17 +162,21 @@ class HumanContainer:
                 audio_data_chunks = self._split_audio_data_chunks(
                     audio_data
                 )
+                is_final_frame = False
                 for i, chunk in enumerate(audio_data_chunks):
-                    _if_final = is_final and i == len(audio_data_chunks)-1
+                    is_final_frame = is_final and i == len(audio_data_chunks)-1
                     self.audio_queue.put(
                         Data(
                             data=chunk,
-                            is_final=_if_final,
+                            is_final=is_final_frame,
                         )
                     )
+                if is_final_frame:
+                    print(f"Final frame")
             except Exception as e:
                 print(f"Process text data error: {e}, text: {text}")
                 traceback.print_exc()
+                # 遇到错误, 状态重置为 ready
                 self.set_state(StateReady)
                 continue
 
@@ -224,6 +233,10 @@ class HumanContainer:
 
     def process_audio_data_worker(self):
         while not self.stop_event.is_set():
+            # 当前状态可能为 ready, busy 和 speaking, 状态为 pause, 在进行 flush 操作, 暂时不继续读取帧
+            if self.get_state() == StatePause:
+                time.sleep(self.timeout)
+                continue
             is_final = False
             silence = True
             audio_frame_batch = []
@@ -244,11 +257,10 @@ class HumanContainer:
             except Exception as e:
                 print(f"Encode audio feature error: {e}")
                 traceback.print_exc()
+                # 遇到错误, 状态重置为 ready
                 self.set_state(StateReady)
                 continue
             self.audio_chunk_batch = self.audio_chunk_batch[self.batch_size:]
-            if is_final:
-                self.track_sync.flush()
             if silence:
                 for i in range(self.batch_size):
                     frame_index = self._mirror_frame_index(self.frame_index)
@@ -260,6 +272,8 @@ class HumanContainer:
                         asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
                     self._update_frame_index(1)
             else:
+                # 当前状态为 busy, 切换为 speaking
+                self.swap_state(StateBusy, StateSpeaking)
                 face_img_batch = []
                 for i in range(self.batch_size):
                     frame_index = self._mirror_frame_index(self.frame_index + i)
@@ -277,6 +291,7 @@ class HumanContainer:
                 except Exception as e:
                     print(f"Inference error: {e}")
                     traceback.print_exc()
+                    # 遇到错误, 状态重置为 ready
                     self.set_state(StateReady)
                     continue
 
@@ -290,7 +305,8 @@ class HumanContainer:
                     self._update_frame_index(1)
 
             if is_final:
-                self.set_state(StateReady)
+                # 当前状态为 speaking, 最后一个帧, 状态切换回 ready
+                self.swap_state(StateSpeaking, StateReady)
 
     def shutdown(self):
         self.stop_event.set()
