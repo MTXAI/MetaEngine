@@ -2,3 +2,6 @@
 2. 静音状态下数字人播放不丝滑
 3. 复述文字第一次能成功，但是后续复述失败，音频视频都不能正确播放
 4. 当前状态标记不完善，需要在完全静音后，再将状态标记为 Ready
+
+
+put text into queue -- container.agent.answer -- container.audio_c.text_to_speech(tts, chunk, and put into queue) -- container.process_frames()

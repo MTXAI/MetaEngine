@@ -59,15 +59,16 @@ class Wav2LipWrapper(AvatarModelWrapper):
         self.model = load_model(path)
 
     def encode_audio_feature(self, frame_batch: List[np.array], config: PlayerConfig):
+        # expect 5120
         frames = np.concatenate(frame_batch)
         mel = melspectrogram(frames)
 
         batch_size = config.batch_size
-        mel_step_size = batch_size
+        mel_step_size = 16
         i = 0
         audio_feature_batch = []
         while i < batch_size:
-            start_idx = int(i * hparams.num_mels / config.fps)
+            start_idx = 0
             if start_idx + mel_step_size > len(mel[0]):
                 audio_feature_batch.append(mel[:, len(mel[0]) - mel_step_size:])
             else:
@@ -76,6 +77,7 @@ class Wav2LipWrapper(AvatarModelWrapper):
         return audio_feature_batch
 
     def inference(self, audio_feature_batch: torch.Tensor, face_img_batch: torch.Tensor, config: PlayerConfig):
+        # expect torch.Size([16, 80, 16]) torch.Size([16, 256, 256, 3])
         face_img_masked = face_img_batch.clone()
         face_img_masked[:, face_img_batch[0].shape[0] // 2:] = 0
         face_img_batch = torch.cat((face_img_masked, face_img_batch), dim=3) / 255.

@@ -9,12 +9,10 @@ from langchain_openai import ChatOpenAI
 from engine.agent.agents.base_agent import BaseAgent
 from engine.config import PlayerConfig
 from engine.human.avatar.avatar import AvatarModelWrapper
-from engine.human.player.constant import StateReady
-from engine.human.player.container import AudioContainer, VideoContainer, TextContainer
-from engine.human.player.state import HumanState
+from engine.human.player.container import HumanContainer
+from engine.human.player.state import *
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
 from engine.human.voice.voice import TTSModelWrapper
-from engine.utils.concurrent.pipeline import Pipeline, TODOPipelineCallback
 from engine.utils.concurrent.pool import TaskInfo
 from engine.runtime import thread_pool
 
@@ -43,81 +41,44 @@ class HumanPlayer:
         )
         shared_state = HumanState(state=StateReady)
         self.state = shared_state
-        self.text_container = TextContainer(
-            shared_state,
+        self.container = HumanContainer(
             config,
             agent,
-            tts_model
-        )
-        self.audio_container = AudioContainer(
-            shared_state,
-            config,
-            avatar_model,
-            self.track_sync,
-            loop
-        )
-        self.video_container = VideoContainer(
-            shared_state,
-            config,
+            tts_model,
             avatar_model,
             avatar,
             self.track_sync,
-            loop
+            loop,
         )
-        self.containers = [
-            self.text_container,
-            self.audio_container,
-            self.video_container,
-        ]
         self.loop = loop
-        pipeline_callback = TODOPipelineCallback()
-        self.pipelines = [
-            Pipeline(
-                name="AudioPipeline",
-                producer=self.text_container.audio_producer,
-                consumer=self.audio_container.audio_consumer,
-                callback=pipeline_callback,
-            ),
-            Pipeline(
-                name="VideoPipeline",
-                producer=self.audio_container.audio_feature_producer,
-                consumer=self.video_container.audio_feature_consumer,
-                callback=pipeline_callback,
-            )
-        ]
         self._start = False
         self._speaking = False
 
+    def busy(self):
+        return self.container.get_state() == StateBusy
+
     def flush(self):
-        for container in self.containers:
-            container.flush()
-        for pipeline in self.pipelines:
-            pipeline.flush()
-        self.track_sync.flush()
+        self.container.flush()
 
     def start(self):
         if self._start:
             return
-        for i, pipe in enumerate(self.pipelines):
-            thread_pool.submit(
-                pipe.produce_worker,
-                task_info=TaskInfo(
-                    name=f"{i}_produce_worker"
-                )
+        thread_pool.submit(
+            self.container.process_text_data_worker,
+            task_info=TaskInfo(
+                name=f"container.process_text_data_worker"
             )
-            thread_pool.submit(
-                pipe.consume_worker,
-                task_info=TaskInfo(
-                    name=f"{i}_consume_worker"
-                )
+        )
+        thread_pool.submit(
+            self.container.process_audio_data_worker,
+            task_info=TaskInfo(
+                name=f"container.process_audio_data_worker"
             )
+        )
         self._start = True
 
     def shutdown(self):
-        for container in self.containers:
-            container.shutdown()
-        for pipe in self.pipelines:
-            pipe.shutdown()
+        self.container.shutdown()
 
 
 if __name__ == '__main__':
@@ -205,10 +166,11 @@ if __name__ == '__main__':
                 counttime = 0
 
     async def put_text_data():
-        for i in range(3):
-            res_data = player.text_container.put_text_data(Data(
-                data="你好, 我是墨菲",
-                is_chat=False,
+        for i in range(1):
+            player.flush()
+            res_data = player.container.put_text_data(Data(
+                data="介绍故宫",
+                is_chat=True,
             ))
             print(res_data)
             time.sleep(5)

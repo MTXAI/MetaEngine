@@ -93,7 +93,7 @@ class VideoStreamTrack(MediaStreamTrack):
         self.config = config
         self.fps = config.fps
         self.clock_rate = config.video_clock_rate
-        self.ptime = config.audio_ptime
+        self.ptime = config.video_ptime
         self.timebase = fractions.Fraction(1, self.clock_rate)
         self.track_sync = track_sync
 

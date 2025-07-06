@@ -1,7 +1,16 @@
 import threading
 
-from engine.human.player.constant import StateReady
 from engine.utils.concurrent.lock import RWLock
+
+
+StateReady = 0
+StateBusy = 1
+StatePause = 2
+state_str = {
+    StateReady: "StateReady",
+    StateBusy: "StateBusy",
+    StatePause: "StatePause",
+}
 
 
 class HumanState:

@@ -168,9 +168,9 @@ async def websocket_handler(request):
 async def echo(request):
     data = await request.json()
     text = data.get('text')
-    if text:
+    if text and not player.busy():
         player.flush()
-        res_data = player.text_container.put_text_data(
+        res_data = player.container.put_text_data(
             Data(
                 data=text,
                 is_chat=False,
@@ -178,6 +178,7 @@ async def echo(request):
         )
         print(res_data)
         return web.json_response({"status": "success", "data": res_data})
+
     return web.json_response({"status": "error", "message": "Missing text parameter"}, status=400)
 
 
@@ -185,9 +186,9 @@ async def echo(request):
 async def chat(request):
     data = await request.json()
     question = data.get('question')
-    if question:
+    if question and not player.busy():
         player.flush()
-        res_data = player.text_container.put_text_data(
+        res_data = player.container.put_text_data(
             Data(
                 data=question,
                 is_chat=True,
