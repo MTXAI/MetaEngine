@@ -1,6 +1,6 @@
 import io
+import logging
 import traceback
-from enum import unique, Enum
 from typing import Callable
 
 import dashscope
@@ -85,7 +85,7 @@ class AliTTSWrapper(TTSModelWrapper):
             speech = resample_sound(data, self.sample_rate)
             return speech
         except Exception as e:
-            print(f"Failed to resample audio, error: {e}")
+            logging.info(f"Failed to resample audio, error: {e}")
             traceback.print_exc()
             return None
 
@@ -129,7 +129,7 @@ class AliTTSWrapper(TTSModelWrapper):
         try:
             self.streaming_synthesizer.streaming_call(text)
         except Exception as e:
-            print(f"Failed to stream inference: {e}")
+            logging.info(f"Failed to stream inference: {e}")
             traceback.print_exc()
 
     def inference(self, text):
@@ -143,7 +143,7 @@ class AliTTSWrapper(TTSModelWrapper):
             except TimeoutError:
                 continue
             except Exception as e:
-                print(f"Failed to inference: {e}")
+                logging.info(f"Failed to inference: {e}")
                 traceback.print_exc()
                 return None
         return None
@@ -188,13 +188,13 @@ if __name__ == '__main__':
 
     def fn(speech: np.ndarray):
         if speech is None:
-            print("speech is None")
+            logging.info("speech is None")
             return
         audio_data = Data(
             data=speech,
             is_final=False,
         )
-        print(len(audio_data.data))
+        logging.info(len(audio_data.data))
 
     def synthesizer_with_llm():
         tts_model.reset(fn)
@@ -209,10 +209,10 @@ if __name__ == '__main__':
         )
         for response in responses:
             if response.status_code == HTTPStatus.OK:
-                print(response.output.choices[0]["message"]["content"], end="")
+                logging.info(response.output.choices[0]["message"]["content"], end="")
                 tts_model.streaming_inference(response.output.choices[0]["message"]["content"])
             else:
-                print(
+                logging.info(
                     "Request id: %s, Status code: %s, error code: %s, error message: %s"
                     % (
                         response.request_id,

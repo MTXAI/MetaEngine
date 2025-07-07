@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import threading
 import traceback
 from typing import Callable, Tuple, Union, List
@@ -17,10 +18,10 @@ class PipelineCallback:
 
 class TODOPipelineCallback(PipelineCallback):
     def on_error(self, e: Exception):
-        print('error', e)
+        logging.info('error', e)
 
     def on_stop(self, module: str=""):
-        print('stop', module)
+        logging.info('stop', module)
 
 
 class Pipeline:

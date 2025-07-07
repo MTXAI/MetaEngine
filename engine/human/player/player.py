@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from typing import Tuple
 
@@ -144,7 +145,7 @@ if __name__ == '__main__':
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                print(f"{i}, {i / counttime}: {frame}, {player.track_sync.audio_queue.qsize()}")
+                logging.info(f"{i}, {i / counttime}: {frame}, {player.track_sync.audio_queue.qsize()}")
                 i = 0
                 counttime = 0
 
@@ -158,7 +159,7 @@ if __name__ == '__main__':
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                print(f"{i}, {i / counttime}: {frame}, {player.track_sync.video_queue.qsize()}")
+                logging.info(f"{i}, {i / counttime}: {frame}, {player.track_sync.video_queue.qsize()}")
                 i = 0
                 counttime = 0
 
@@ -170,7 +171,7 @@ if __name__ == '__main__':
                 is_chat=True,
                 stream=True,
             ))
-            print(res_data)
+            logging.info(res_data)
             time.sleep(5)
 
     asyncio.run_coroutine_threadsafe(listen_audio(), loop=loop)

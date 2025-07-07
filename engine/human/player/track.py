@@ -9,7 +9,7 @@ from av.frame import Frame
 from av.packet import Packet
 
 from engine.config import PlayerConfig
-from engine.utils.concurrent.queue import ObservableQueue
+from engine.utils.concurrent.queues import ObservableQueue
 
 
 class StreamTrackSync:

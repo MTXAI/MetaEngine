@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import logging
 import queue
 import threading
 import time
@@ -69,11 +70,11 @@ class HumanContainer:
     def swap_state(self, old_state: int, new_state: int):
         res = self.state.swap_state(old_state, new_state)
         if res:
-            print(f"swap: {state_str[old_state]} -> {state_str[new_state]}")
+            logging.info(f"swap: {state_str[old_state]} -> {state_str[new_state]}")
         return res
 
     def set_state(self, state: int):
-        print(f"set:  {state_str[self.state.get_state()]} -> {state_str[state]}")
+        logging.info(f"set:  {state_str[self.state.get_state()]} -> {state_str[state]}")
         self.state.set_state(state)
 
     def get_state(self):
@@ -135,7 +136,7 @@ class HumanContainer:
         text = text_data.get("data")
         is_chat = text_data.get("is_chat", False)
         stream = text_data.get("stream")
-        print(f"开始消费文本数据: {text}, is_chat={is_chat}, stream={stream}")
+        logging.info(f"开始消费文本数据: {text}, is_chat={is_chat}, stream={stream}")
 
         final_data = Data(
             data="",
@@ -205,7 +206,7 @@ class HumanContainer:
                     is_final = answer_data.get("is_final")
                     if len(answer) > 0 and not is_final:
                         # todo, 判断 answer是否仅为标点符号, 以及做一定的组装后再调用 tts model
-                        print(f"Answer: {answer}, is_final={is_final}")
+                        logging.info(f"Answer: {answer}, is_final={is_final}")
                         try:
                             if stream:
                                 self.tts_model.streaming_inference(answer)
@@ -213,13 +214,13 @@ class HumanContainer:
                                 speech = self.tts_model.inference(answer)
                                 self._produce_audio_data(speech)
                         except Exception as e:
-                            print(f"Inference error: {e}")
+                            logging.info(f"Inference error: {e}")
                             traceback.print_exc()
                             continue
                     elif len(answer) == 0 and not is_final:
                         continue
                     else:
-                        print("final frame")
+                        logging.info("final frame")
                         self.audio_queue.put(
                             Data(
                                 data=None,
@@ -228,7 +229,7 @@ class HumanContainer:
                         )
                 self.tts_model.complete()
             except Exception as e:
-                print(f"Process text data error: {e}, text: {text_data.get('data')}")
+                logging.info(f"Process text data error: {e}, text: {text_data.get('data')}")
                 traceback.print_exc()
                 # 遇到错误, 状态重置为 ready
                 self.set_state(StateReady)
@@ -312,7 +313,7 @@ class HumanContainer:
             try:
                 audio_feature_batch = self.avatar_model.encode_audio_feature(self.audio_chunk_batch, self.config)
             except Exception as e:
-                print(f"Encode audio feature error: {e}")
+                logging.info(f"Encode audio feature error: {e}")
                 traceback.print_exc()
                 # 遇到错误, 状态重置为 ready
                 self.set_state(StateReady)
@@ -346,7 +347,7 @@ class HumanContainer:
                     with torch.no_grad():
                         pred_img_batch = self.avatar_model.inference(audio_feature_batch, face_img_batch, self.config)
                 except Exception as e:
-                    print(f"Inference error: {e}")
+                    logging.info(f"Inference error: {e}")
                     traceback.print_exc()
                     # 遇到错误, 状态重置为 ready
                     self.set_state(StateReady)

@@ -1,5 +1,5 @@
-import asyncio
 import io
+import logging
 import traceback
 from typing import Callable
 
@@ -30,7 +30,7 @@ class EdgeTTSWrapper(TTSModelWrapper):
                 elif chunk["type"] == "WordBoundary":
                     pass
         except Exception as e:
-            print(f"Failed to communicate: {e}")
+            logging.info(f"Failed to communicate: {e}")
             traceback.print_exc()
             return
 

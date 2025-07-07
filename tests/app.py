@@ -172,7 +172,7 @@ async def echo(request):
                 stream=False,
             )
         )
-        print(res_data)
+        logging.info(res_data)
         return web.json_response({"status": "success", "data": res_data})
 
     return web.json_response({"status": "error", "message": "Missing text parameter"}, status=400)
@@ -191,7 +191,7 @@ async def chat(request):
                 stream=True,
             )
         )
-        print(res_data)
+        logging.info(res_data)
         return web.json_response({"status": "success", "data": res_data})
     return web.json_response({"status": "error", "message": "Missing question parameter"}, status=400)
 

@@ -1,3 +1,4 @@
+import logging
 import threading
 from contextlib import contextmanager
 
@@ -105,7 +106,7 @@ if __name__ == '__main__':
         global shared_data
         while True:
             with rw_lock.reader_lock():
-                print(f"Reader {id} got read lock, data: {shared_data}")
+                logging.info(f"Reader {id} got read lock, data: {shared_data}")
                 time.sleep(0.1)
             time.sleep(0.2)  # 释放锁后稍等
 
@@ -115,7 +116,7 @@ if __name__ == '__main__':
         while True:
             with rw_lock.writer_lock():
                 shared_data += 1
-                print(f"Writer {id} updated data to {shared_data}")
+                logging.info(f"Writer {id} updated data to {shared_data}")
                 time.sleep(0.2)
             time.sleep(0.5)  # 释放锁后稍等
 
@@ -133,4 +134,4 @@ if __name__ == '__main__':
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("Exiting...")
+        logging.info("Exiting...")
