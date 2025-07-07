@@ -11,23 +11,24 @@ from engine.agent.vecdb.chroma import try_load_db
 from engine.config import WAV2LIP_PLAYER_CONFIG, DEFAULT_PROJECT_CONFIG, ONE_API_LLM_MODEL
 from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
 from engine.human.player.player import HumanPlayer
+from engine.human.voice.tts_ali import AliTTSWrapper
 from engine.human.voice.tts_edge import EdgeTTSWrapper
 from engine.utils.data import Data
 
 a_f = '../avatars/wav2lip256_avatar1'
 c_f = '../checkpoints/wav2lip.pth'
 
-# tts_model = AliTTSWrapper(
-#     model_str="cosyvoice-v1",
-#     api_key="sk-361f246a74c9421085d1d137038d5064",
-#     voice_type="longxiaochun",
-#     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
-# )
-
-tts_model = EdgeTTSWrapper(
-    voice_type="zh-CN-YunxiaNeural",
+tts_model = AliTTSWrapper(
+    model_str="cosyvoice-v1",
+    api_key="sk-361f246a74c9421085d1d137038d5064",
+    voice_type="longxiaochun",
     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
 )
+
+# tts_model = EdgeTTSWrapper(
+#     voice_type="zh-CN-YunxiaNeural",
+#     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
+# )
 
 avatar_model = Wav2LipWrapper(c_f)
 
@@ -186,6 +187,7 @@ async def chat(request):
             Data(
                 data=question,
                 is_chat=True,
+                stream=True,
             )
         )
         print(res_data)

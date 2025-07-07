@@ -86,6 +86,7 @@ if __name__ == '__main__':
     from engine.utils.data import Data
     from engine.config import ONE_API_LLM_MODEL
     from engine.human.voice.tts_ali import AliTTSWrapper
+    from engine.human.voice.tts_edge import EdgeTTSWrapper
     from engine.agent.agents.custom import SimpleAgent
 
     a_f = '../../../avatars/wav2lip256_avatar1'
@@ -166,7 +167,8 @@ if __name__ == '__main__':
             player.flush()
             res_data = player.container.put_text_data(Data(
                 data="介绍故宫",
-                is_chat=True,
+                is_chat=False,
+                stream=False,
             ))
             print(res_data)
             time.sleep(5)

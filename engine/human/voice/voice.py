@@ -1,19 +1,25 @@
+from typing import Callable
+
+import numpy as np
 from torch import nn
 
 
 class TTSModelWrapper(nn.Module):
-    def streaming_inference(self, text):
+    inited: bool = False
+    def reset(self, fn: Callable):
+        self.inited = True
+
+    def complete(self):
+        self.inited = False
+
+    def streaming_inference(self, text: str) -> None:
         """
         流式输入文本, 输出音频
-        :param text:
-        :return:
         """
-        raise NotImplementedError()
+        assert self.inited
 
-    def inference(self, text):
+    def inference(self, text: str) -> np.ndarray:
         """
         输入文本, 输出音频
-        :param text:
-        :return:
         """
-        pass
+        assert self.inited

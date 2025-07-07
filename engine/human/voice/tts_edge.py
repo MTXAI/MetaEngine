@@ -1,6 +1,7 @@
 import asyncio
 import io
 import traceback
+from typing import Callable
 
 import edge_tts
 
@@ -20,24 +21,33 @@ class EdgeTTSWrapper(TTSModelWrapper):
         self.voice_type = voice_type
         self.sample_rate = sample_rate
 
-    async def _communicating(self, text):
+    def _communicating(self, text):
         try:
             communicate = edge_tts.Communicate(text, self.voice_type)
-            async for chunk in communicate.stream():
+            for chunk in communicate.stream_sync():
                 if chunk["type"] == "audio":
                     self.buffer.write(chunk["data"])
                 elif chunk["type"] == "WordBoundary":
                     pass
         except Exception as e:
+            print(f"Failed to communicate: {e}")
             traceback.print_exc()
-            raise e
+            return
+
+    def reset(self, fn: Callable):
+        self.inited = True
+
+    def complete(self):
+        self.inited = False
 
     def streaming_inference(self, text):
-        # return self.inference(text)
-        raise NotImplementedError()
+        assert self.inited
+        # todo streaming 支持
+        return self.inference(text)
 
     def inference(self, text):
-        asyncio.new_event_loop().run_until_complete(self._communicating(text))
+        assert self.inited
+        self._communicating(text)
         speech = resample_sound(self.buffer, self.sample_rate)
         self.buffer.seek(0)
         self.buffer.truncate()
