@@ -167,8 +167,8 @@ if __name__ == '__main__':
             player.flush()
             res_data = player.container.put_text_data(Data(
                 data="介绍故宫",
-                is_chat=False,
-                stream=False,
+                is_chat=True,
+                stream=True,
             ))
             print(res_data)
             time.sleep(5)

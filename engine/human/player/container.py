@@ -238,8 +238,11 @@ class HumanContainer:
         try:
             audio_data = self.audio_queue.get(timeout=self.timeout)
             chunk = audio_data.get("data")
-            is_final = audio_data.get("is_final")
             state=1
+            if chunk is None:
+                chunk = np.zeros(self.chunk_size, dtype=np.float32)
+                state = 0
+            is_final = audio_data.get("is_final")
         except queue.Empty:
             chunk = np.zeros(self.chunk_size, dtype=np.float32)
             is_final = False

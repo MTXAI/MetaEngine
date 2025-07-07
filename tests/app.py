@@ -169,6 +169,7 @@ async def echo(request):
             Data(
                 data=text,
                 is_chat=False,
+                stream=False,
             )
         )
         print(res_data)

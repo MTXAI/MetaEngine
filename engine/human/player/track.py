@@ -17,8 +17,8 @@ class StreamTrackSync:
         self.fps = config.fps
         self.prefer = config.track_sync_prefer
         self.lock = asyncio.Lock()
-        self.audio_queue = ObservableQueue(self.fps)
-        self.video_queue = ObservableQueue(self.fps)
+        self.audio_queue = ObservableQueue(self.fps, wait_count=config.frame_multiple)
+        self.video_queue = ObservableQueue(self.fps // config.frame_multiple, wait_count=1)
 
     def flush(self):
         self.audio_queue.clear()
