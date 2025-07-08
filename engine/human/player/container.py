@@ -88,6 +88,9 @@ class HumanContainer:
         # 完成 flush 操作后, 切换到 ready 状态
         self.set_state(StateReady)
 
+    def flush_track(self):
+        self.frame_index = self.track_sync.flush()
+
     def flush(self):
         # 中断数字人当前对话
         self.set_state(StatePause)
@@ -95,6 +98,7 @@ class HumanContainer:
         self.audio_queue.queue.clear()
         self.audio_chunk_batch = []
         self.audio_data_fragment = None
+        self.flush_track()
         # 完成 flush 操作后, 切换到 ready 状态
         self.set_state(StateReady)
 
@@ -270,8 +274,6 @@ class HumanContainer:
 
     def _update_frame_index(self, n):
         self.frame_index += n
-        if self._mirror_frame_index(self.frame_index) == 0:
-            self.frame_index = 0
 
     def _make_audio_frame(self, chunk):
         chunk = (chunk * 32767).astype(np.int16)
@@ -336,9 +338,7 @@ class HumanContainer:
             else:
                 # 当前状态为 busy, 切换为 speaking
                 if self.swap_state(StateBusy, StateSpeaking):
-                    self.frame_index -= self.track_sync.flush()
-                    while self.frame_index < 0:
-                        self.frame_index += self.frame_count
+                    self.flush_track()
                 face_img_batch = []
                 for i in range(self.batch_size):
                     frame_index = self._mirror_frame_index(self.frame_index + i)

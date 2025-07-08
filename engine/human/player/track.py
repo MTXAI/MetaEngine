@@ -21,12 +21,12 @@ class StreamTrackSync:
         self.video_queue = ObservableQueue(self.fps, wait_count=1)
 
         self.lock = asyncio.Lock()
-        self.wait_frame_count = 0
+        self.real_frame_index = 0
 
     def flush(self):
         self.audio_queue.clear()
         self.video_queue.clear()
-        return self.wait_frame_count
+        return self.real_frame_index
 
     async def put_audio_frame(self, frame: AudioFrame):
         if self.prefer == 'video':
@@ -38,7 +38,7 @@ class StreamTrackSync:
             await self.audio_queue.wait_for_data()
         await self.video_queue.put(frame)
         async with self.lock:
-            self.wait_frame_count += 1
+            self.real_frame_index += 1
 
     async def get_audio_frame(self) -> AudioFrame:
         frame = await self.audio_queue.get()
@@ -47,7 +47,7 @@ class StreamTrackSync:
     async def get_video_frame(self) -> VideoFrame:
         frame = await self.video_queue.get()
         async with self.lock:
-            self.wait_frame_count -= 1
+            self.real_frame_index -= 1
         return frame
 
 

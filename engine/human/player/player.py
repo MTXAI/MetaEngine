@@ -51,7 +51,7 @@ class HumanPlayer:
         self._speaking = False
 
     def busy(self):
-        return self.container.get_state() == StateBusy
+        return self.container.get_state() == StateBusy or self.container.get_state() == StatePause
 
     def flush(self):
         self.container.flush()
