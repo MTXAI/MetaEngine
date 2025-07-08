@@ -5,6 +5,9 @@ from engine.utils.common import get_device_and_start_method
 from engine.utils.config import EasyConfig
 
 
+# 存放各类配置, 临时方案
+
+
 class ProjectConfig(EasyConfig):
     root_path: Path
     workspace_path: Path
