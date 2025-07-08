@@ -26,7 +26,7 @@ class ObservableQueue:
             async with self.condition:
                 self.condition.notify_all()
 
-    async def get(self):
+    async def get(self, timeout=None):
         """从队列中获取元素（与原生Queue行为一致）"""
         return await self.queue.get()
 

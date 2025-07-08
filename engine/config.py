@@ -5,6 +5,9 @@ from engine.utils.common import get_device_and_start_method
 from engine.utils.config import EasyConfig
 
 
+# 存放各类配置, 临时方案
+
+
 class ProjectConfig(EasyConfig):
     root_path: Path
     workspace_path: Path
@@ -90,7 +93,6 @@ class PlayerConfig(EasyConfig):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-frame_multiple = 1
 WAV2LIP_PLAYER_CONFIG = PlayerConfig(
     dict(
         fps=50,  # must be 50
@@ -98,8 +100,7 @@ WAV2LIP_PLAYER_CONFIG = PlayerConfig(
         batch_size=16,
         timeout=1/50./2,
         audio_ptime=1/50.,
-        video_ptime=1/50.*frame_multiple,  # 一渲染二
-        frame_multiple=frame_multiple,
+        video_ptime=1/50.,
         video_clock_rate=90000,
         track_sync_prefer='audio',
     )

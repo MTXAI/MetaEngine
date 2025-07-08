@@ -35,29 +35,32 @@ def _read_imgs(img_list):
         frames.append(frame)
     return frames
 
-def load_avatar(avatar_path):
-    full_imgs_path = f"{avatar_path}/full_imgs"
-    face_imgs_path = f"{avatar_path}/face_imgs"
-    coords_path = f"{avatar_path}/coords.pkl"
-
-    with open(coords_path, 'rb') as f:
-        coord_list_cycle = pickle.load(f)
-    input_img_list = glob.glob(os.path.join(full_imgs_path, '*.[jpJP][pnPN]*[gG]'))
-    input_img_list = sorted(input_img_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
-    frame_list_cycle = _read_imgs(input_img_list)
-    # self.imagecache = ImgCache(len(self.coord_list_cycle),self.full_imgs_path,1000)
-    input_face_list = glob.glob(os.path.join(face_imgs_path, '*.[jpJP][pnPN]*[gG]'))
-    input_face_list = sorted(input_face_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
-    face_list_cycle = _read_imgs(input_face_list)
-
-    return frame_list_cycle ,face_list_cycle ,coord_list_cycle
 
 class Wav2LipWrapper(AvatarModelWrapper):
-    def __init__(self, path):
+    def __init__(self, ckpt_path, avatar_path):
         super().__init__()
-        self.model = load_model(path)
+        self.ckpt_path = ckpt_path
+        self.avatar_path = avatar_path
+        self.model = load_model(ckpt_path)
 
-    def encode_audio_feature(self, frame_batch: List[np.array], config: PlayerConfig):
+    def load_avatar(self):
+        full_imgs_path = f"{self.avatar_path}/full_imgs"
+        face_imgs_path = f"{self.avatar_path}/face_imgs"
+        coords_path = f"{self.avatar_path}/coords.pkl"
+
+        with open(coords_path, 'rb') as f:
+            coord_list_cycle = pickle.load(f)
+        input_img_list = glob.glob(os.path.join(full_imgs_path, '*.[jpJP][pnPN]*[gG]'))
+        input_img_list = sorted(input_img_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
+        frame_list_cycle = _read_imgs(input_img_list)
+        # self.imagecache = ImgCache(len(self.coord_list_cycle),self.full_imgs_path,1000)
+        input_face_list = glob.glob(os.path.join(face_imgs_path, '*.[jpJP][pnPN]*[gG]'))
+        input_face_list = sorted(input_face_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
+        face_list_cycle = _read_imgs(input_face_list)
+
+        return frame_list_cycle, face_list_cycle, coord_list_cycle
+
+    def encode_audio_feature(self, frame_batch: List[np.array], config: PlayerConfig, **kwargs) -> List[np.ndarray]:
         # expect 5120
         frames = np.concatenate(frame_batch)
         mel = melspectrogram(frames)

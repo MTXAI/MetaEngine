@@ -1,17 +1,16 @@
 import asyncio
 import logging
 import time
-from typing import Tuple
 
 from langchain_openai import ChatOpenAI
 
 from engine.agent.agents.base_agent import BaseAgent
 from engine.config import PlayerConfig
-from engine.human.avatar.avatar import AvatarModelWrapper
+from engine.human.avatar import AvatarModelWrapper
 from engine.human.player.container import HumanContainer
 from engine.human.player.state import *
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
-from engine.human.voice.voice import TTSModelWrapper
+from engine.human.voice import TTSModelWrapper
 from engine.runtime import thread_pool
 from engine.utils.concurrent.pool import TaskInfo
 
@@ -23,7 +22,6 @@ class HumanPlayer:
             agent: BaseAgent,
             tts_model: TTSModelWrapper,
             avatar_model: AvatarModelWrapper,
-            avatar: Tuple,
             loop: asyncio.AbstractEventLoop,
     ):
         self.config = config
@@ -45,7 +43,6 @@ class HumanPlayer:
             agent,
             tts_model,
             avatar_model,
-            avatar,
             self.track_sync,
             loop,
         )
@@ -54,7 +51,7 @@ class HumanPlayer:
         self._speaking = False
 
     def busy(self):
-        return self.container.get_state() == StateBusy
+        return self.container.get_state() == StateBusy or self.container.get_state() == StatePause
 
     def flush(self):
         self.container.flush()
@@ -83,7 +80,7 @@ class HumanPlayer:
 if __name__ == '__main__':
 
     from engine.config import WAV2LIP_PLAYER_CONFIG
-    from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
+    from engine.human.avatar.wav2lip import Wav2LipWrapper
     from engine.utils.data import Data
     from engine.config import ONE_API_LLM_MODEL
     from engine.human.voice.tts_ali import AliTTSWrapper
@@ -107,7 +104,7 @@ if __name__ == '__main__':
     #     voice_type="zh-CN-YunxiaNeural",
     #     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
     # )
-    avatar_model = Wav2LipWrapper(c_f)
+    avatar_model = Wav2LipWrapper(c_f, a_f)
 
     # llm_model = ChatOpenAI(
     #     model=QWEN_LLM_MODEL.model_id,
@@ -129,7 +126,6 @@ if __name__ == '__main__':
         agent=agent,
         tts_model=tts_model,
         avatar_model=avatar_model,
-        avatar=load_avatar(a_f),
         loop=loop,
     )
 

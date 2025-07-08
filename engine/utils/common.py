@@ -46,7 +46,11 @@ class EasyDict(dict):
         for key, value in self.items():
             if len(text) > 0:
                 text += ', '
-            text += key + ': ' + str(value)
+            if hasattr(value, '__str__'):
+                value_str = str(value)
+            else:
+                value_str = f"{type(value).__name__}_{id(value)}"
+            text += key + ': ' + value_str
         return '{%s}}' % text
 
 
