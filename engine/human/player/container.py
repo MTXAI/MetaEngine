@@ -80,6 +80,16 @@ class HumanContainer:
     def get_state(self):
          return self.state.get_state()
 
+    def pause(self):
+        # 中断数字人当前对话
+        self.set_state(StatePause)
+        self.text_queue.queue.clear()
+        self.audio_queue.queue.clear()
+        self.audio_chunk_batch = []
+        self.audio_data_fragment = None
+        # 完成 flush 操作后, 切换到 ready 状态
+        self.set_state(StateReady)
+
     def flush(self):
         # 中断数字人当前对话
         self.set_state(StatePause)
@@ -87,6 +97,8 @@ class HumanContainer:
         self.audio_queue.queue.clear()
         self.audio_chunk_batch = []
         self.audio_data_fragment = None
+        frame_index = self.track_sync.flush()
+        self.frame_index = frame_index
         # 完成 flush 操作后, 切换到 ready 状态
         self.set_state(StateReady)
 
@@ -324,7 +336,7 @@ class HumanContainer:
                     frame_index = self._mirror_frame_index(self.frame_index)
                     video_frame = self.frame_list_cycle[frame_index]
                     video_frame = self._make_video_frame(video_frame)
-                    asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
+                    asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame, self.frame_index), self.loop)
                     for j in range(self.frame_multiple):
                         audio_frame = audio_frame_batch[i * self.frame_multiple + j]
                         asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
@@ -356,7 +368,7 @@ class HumanContainer:
                 for i, pred in enumerate(pred_img_batch):
                     frame_index = self._mirror_frame_index(self.frame_index)
                     video_frame = self._render_frame(pred, frame_index)
-                    asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
+                    asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame, self.frame_index), self.loop)
                     for j in range(self.frame_multiple):
                         audio_frame = audio_frame_batch[i * self.frame_multiple + j]
                         asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
