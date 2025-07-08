@@ -46,7 +46,7 @@ def consume_fn(data, processed_data=None):
         encoder_chunk_look_back=encoder_chunk_look_back,
         decoder_chunk_look_back=decoder_chunk_look_back,
     )
-    print(res[0]['text'])
+    logging.info(res[0]['text'])
     return res[0]['text']
 
 

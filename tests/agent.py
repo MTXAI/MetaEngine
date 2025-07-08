@@ -25,7 +25,7 @@ def test_simple_agent(args):
     agent = SimpleAgent(model)
     logging.info("Final output:")
     answer = agent.answer("MetaEngine是什么? 作者是谁?")
-    print(answer)
+    logging.info(answer)
 
 def test_qa_agent(args):
     global vecdb_path
@@ -60,7 +60,7 @@ def test_qa_agent(args):
         if isinstance(agent_output, FinalAnswerStep):
             # logging.info(agent_output)
             res = str(agent_output.output)
-            print(res)
+            logging.info(res)
 
 def test_knowledge_agent(args):
     global vecdb_path
@@ -86,10 +86,10 @@ def test_knowledge_agent(args):
     h.append(user_history)
     h.append(ai_history)
     agent = KnowledgeAgent(model, vector_store)
-    print("Final output:")
+    logging.info("Final output:")
     for text_chunk in agent.stream_answer(question="MetaEngine是什么? 作者是谁?", use_rag=True, use_web=False,
                                                   chat_history=History.convert_histories_to_msg_str(h)):
-        print(text_chunk)
+        logging.info(text_chunk)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

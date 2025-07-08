@@ -23,7 +23,7 @@ parser.add_argument('--face_det_batch_size', type=int,
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-print('Using {} for inference.'.format(device))
+logging.info('Using {} for inference.'.format(device))
 
 def osmakedirs(path_list):
     for path in path_list:
@@ -45,7 +45,7 @@ def video2imgs(vid_path, save_path, ext = '.png',cut_frame = 10000000):
 
 def read_imgs(img_list):
     frames = []
-    print('reading images...')
+    logging.info('reading images...')
     for img_path in tqdm(img_list):
         frame = cv2.imread(img_path)
         frames.append(frame)
@@ -75,7 +75,7 @@ def face_detect(images):
 			if batch_size == 1: 
 				raise RuntimeError('Image too big to run face detection on GPU. Please use the --resize_factor argument')
 			batch_size //= 2
-			print('Recovering from OOM error; New batch size: {}'.format(batch_size))
+			logging.info('Recovering from OOM error; New batch size: {}'.format(batch_size))
 			continue
 		break
 
@@ -106,7 +106,7 @@ if __name__ == "__main__":
     face_imgs_path = f"{avatar_path}/face_imgs" 
     coords_path = f"{avatar_path}/coords.pkl"
     osmakedirs([avatar_path,full_imgs_path,face_imgs_path])
-    print(args)
+    logging.info(args)
 
     #if os.path.isfile(args.video_path):
     video2imgs(args.video_path, full_imgs_path, ext = 'png')

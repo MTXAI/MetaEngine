@@ -19,31 +19,31 @@ class Callback(ResultCallback):
     _stream = None
 
     def on_open(self):
-        # print("websocket is open.")
+        # logging.info("websocket is open.")
         self._player = pyaudio.PyAudio()
         self._stream = self._player.open(
             format=pyaudio.paInt16, channels=1, rate=22050, output=True
         )
 
     def on_complete(self):
-        print("speech synthesis task complete successfully.")
+        logging.info("speech synthesis task complete successfully.")
 
     def on_error(self, message: str):
-        print(f"speech synthesis task failed, {message}")
+        logging.info(f"speech synthesis task failed, {message}")
 
     def on_close(self):
-        print("websocket is closed.")
+        logging.info("websocket is closed.")
         # stop player
         self._stream.stop_stream()
         self._stream.close()
         self._player.terminate()
 
     def on_event(self, message):
-        # print(f"recv speech synthsis message {message}")
+        # logging.info(f"recv speech synthsis message {message}")
         pass
 
     def on_data(self, data: bytes) -> None:
-        # print("audio result length:", len(data))
+        # logging.info("audio result length:", len(data))
         self._stream.write(data)
 callback = Callback()
 synthesizer = SpeechSynthesizer(
@@ -94,7 +94,7 @@ def consume_fn_1(data):
         encoder_chunk_look_back=encoder_chunk_look_back,
         decoder_chunk_look_back=decoder_chunk_look_back,
     )
-    print(res[0]['text'])
+    logging.info(res[0]['text'])
     return {
         "content": res[0]['text'],
         "is_final": is_final,
@@ -136,7 +136,7 @@ async def bridge_producer(data):
     )
     async for chunk in chat_completion:
         content = chunk.choices[0].delta.content
-        print('prod', content)
+        logging.info('prod', content)
         yield content
 
 stop_event = asyncio.Event()
@@ -147,7 +147,7 @@ pipeline_bridge = AsyncBridgeConsumer(
 )
 
 def consume_fn_3(content):
-    print('cons', content)
+    logging.info('cons', content)
     synthesizer.streaming_call(content)
     return content
 

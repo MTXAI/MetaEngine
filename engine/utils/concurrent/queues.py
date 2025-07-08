@@ -6,9 +6,10 @@ class ObservableQueue:
     包装 asyncio.Queue，提供等待队列有数据但不读取的功能
     """
 
-    def __init__(self, maxsize: int = 0):
+    def __init__(self, maxsize: int = 0, wait_count: int = 1):
         self.queue = asyncio.Queue(maxsize=maxsize)
         self.condition = asyncio.Condition()
+        self.wait_count = wait_count
 
     def clear(self):
         while not self.queue.empty():
@@ -21,8 +22,9 @@ class ObservableQueue:
     async def put(self, item):
         """向队列中添加元素，并通知等待者"""
         await self.queue.put(item)
-        async with self.condition:
-            self.condition.notify_all()
+        if self.queue.qsize() >= self.wait_count:
+            async with self.condition:
+                self.condition.notify_all()
 
     async def get(self):
         """从队列中获取元素（与原生Queue行为一致）"""
@@ -31,7 +33,7 @@ class ObservableQueue:
     async def wait_for_data(self):
         """等待队列中有数据，但不读取数据"""
         async with self.condition:
-            while self.queue.empty():
+            while self.queue.qsize() < self.wait_count:
                 await self.condition.wait()
         # 此时队列中至少有一个元素
 

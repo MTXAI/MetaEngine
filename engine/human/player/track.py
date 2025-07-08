@@ -9,7 +9,7 @@ from av.frame import Frame
 from av.packet import Packet
 
 from engine.config import PlayerConfig
-from engine.utils.concurrent.queue import ObservableQueue
+from engine.utils.concurrent.queues import ObservableQueue
 
 
 class StreamTrackSync:
@@ -17,22 +17,28 @@ class StreamTrackSync:
         self.fps = config.fps
         self.prefer = config.track_sync_prefer
         self.lock = asyncio.Lock()
-        self.audio_queue = ObservableQueue(self.fps)
-        self.video_queue = ObservableQueue(self.fps)
+        self.audio_queue = ObservableQueue(self.fps, wait_count=config.frame_multiple)
+        self.video_queue = ObservableQueue(self.fps // config.frame_multiple, wait_count=1)
+        self.frame_index = 0
 
     def flush(self):
+        frame_index = self.frame_index
+        frame_index = frame_index - self.video_queue.qsize()
         self.audio_queue.clear()
         self.video_queue.clear()
+        self.frame_index = 0
+        return frame_index
 
     async def put_audio_frame(self, frame: AudioFrame):
         if self.prefer == 'video':
             await self.video_queue.wait_for_data()
         await self.audio_queue.put(frame)
 
-    async def put_video_frame(self, frame: VideoFrame):
+    async def put_video_frame(self, frame: VideoFrame, frame_index):
         if self.prefer == 'audio':
             await self.audio_queue.wait_for_data()
         await self.video_queue.put(frame)
+        self.frame_index = frame_index
 
     async def get_audio_frame(self) -> AudioFrame:
         frame = await self.audio_queue.get()

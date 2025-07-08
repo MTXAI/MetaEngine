@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from typing import Tuple
 
@@ -86,6 +87,7 @@ if __name__ == '__main__':
     from engine.utils.data import Data
     from engine.config import ONE_API_LLM_MODEL
     from engine.human.voice.tts_ali import AliTTSWrapper
+    from engine.human.voice.tts_edge import EdgeTTSWrapper
     from engine.agent.agents.custom import SimpleAgent
 
     a_f = '../../../avatars/wav2lip256_avatar1'
@@ -143,7 +145,7 @@ if __name__ == '__main__':
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                print(f"{i}, {i / counttime}: {frame}, {player.track_sync.audio_queue.qsize()}")
+                logging.info(f"{i}, {i / counttime}: {frame}, {player.track_sync.audio_queue.qsize()}")
                 i = 0
                 counttime = 0
 
@@ -157,7 +159,7 @@ if __name__ == '__main__':
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                print(f"{i}, {i / counttime}: {frame}, {player.track_sync.video_queue.qsize()}")
+                logging.info(f"{i}, {i / counttime}: {frame}, {player.track_sync.video_queue.qsize()}")
                 i = 0
                 counttime = 0
 
@@ -167,8 +169,9 @@ if __name__ == '__main__':
             res_data = player.container.put_text_data(Data(
                 data="介绍故宫",
                 is_chat=True,
+                stream=True,
             ))
-            print(res_data)
+            logging.info(res_data)
             time.sleep(5)
 
     asyncio.run_coroutine_threadsafe(listen_audio(), loop=loop)

@@ -134,17 +134,17 @@ if __name__ == "__main__":
 
     class SimpleCallback(TaskCallback):
         def on_submit(self, future, task_info):
-            print(f"Task submitted: {future}, info: {task_info}")
+            logging.info(f"Task submitted: {future}, info: {task_info}")
 
         def on_schedule(self, future, task_info):
-            print(f"Task scheduled: {future}, info: {task_info}")
+            logging.info(f"Task scheduled: {future}, info: {task_info}")
 
         def on_complete(self, future, task_info):
             try:
                 result = future.result()
-                print(f"Task completed, Result: {result}, info: {task_info}")
+                logging.info(f"Task completed, Result: {result}, info: {task_info}")
             except Exception as e:
-                print(f"Task completed, Error: {e}, info: {task_info}")
+                logging.info(f"Task completed, Error: {e}, info: {task_info}")
 
 
     with ThreadPool(max_workers=4, max_queue_size=5) as pool:
@@ -160,18 +160,18 @@ if __name__ == "__main__":
                     task_info=task_info,
                     callback=SimpleCallback(),
                 )
-                print(f"Submitted task {i}")
+                logging.info(f"Submitted task {i}")
                 submitted_futures.append(future)
         except Exception as e:
-            print(e)
+            logging.info(e)
 
         # Get and print results for each submitted task
         for future in submitted_futures:
             result = pool.wait_for_task(future)
-            print(f"Result for task {submitted_futures.index(future)}: {result}")
+            logging.info(f"Result for task {submitted_futures.index(future)}: {result}")
 
         pool.shutdown(wait=True)
 
         # Get and print current status
         status = pool.get_status()
-        print("Current Status:", status)
+        logging.info("Current Status:", status)

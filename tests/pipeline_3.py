@@ -26,7 +26,7 @@ async def produce():
     chunk_stride = chunk_size[1] * 960  # 600ms
 
     total_chunk_num = int(len((speech) - 1) / chunk_stride + 1)
-    print(total_chunk_num)
+    logging.info(total_chunk_num)
     for i in range(total_chunk_num):
         speech_chunk = speech[i * chunk_stride:(i + 1) * chunk_stride]
         is_final = i == total_chunk_num - 1
@@ -47,7 +47,7 @@ def consume_fn_1(data, processed_data=None):
         encoder_chunk_look_back=encoder_chunk_look_back,
         decoder_chunk_look_back=decoder_chunk_look_back,
     )
-    print(res[0]['text'])
+    logging.info(res[0]['text'])
     return {
         "content": res[0]['text'],
         "is_final": is_final,
@@ -81,7 +81,7 @@ async def consume_fn_2(data, processed_data=None):
     async for chunk in chat_completion:
         c = chunk.choices[0].delta.content
         # yield c
-        print(c)
+        logging.info(c)
 
 
 all_content = ""
