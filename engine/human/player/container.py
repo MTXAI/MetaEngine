@@ -29,7 +29,6 @@ class HumanContainer:
             agent: BaseAgent,
             tts_model: TTSModelWrapper,
             avatar_model: AvatarModelWrapper,
-            avatar: Tuple,
             track_sync: StreamTrackSync,
             loop: asyncio.AbstractEventLoop,
     ):
@@ -37,8 +36,8 @@ class HumanContainer:
         self.agent = agent
         self.tts_model = tts_model
         self.avatar_model = avatar_model
-        self.avatar = avatar
-        self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = avatar
+        self.avatar = self.avatar_model.load_avatar()
+        self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = self.avatar
         self.track_sync = track_sync
         self.loop = loop
 
@@ -53,7 +52,6 @@ class HumanContainer:
         # from config
         self.fps = config.fps
         self.sample_rate = config.sample_rate
-        self.frame_multiple = config.frame_multiple
         self.timeout = config.timeout
         self.audio_ptime = config.audio_ptime
         self.video_ptime = config.video_ptime
@@ -97,8 +95,6 @@ class HumanContainer:
         self.audio_queue.queue.clear()
         self.audio_chunk_batch = []
         self.audio_data_fragment = None
-        frame_index = self.track_sync.flush()
-        self.frame_index = frame_index
         # 完成 flush 操作后, 切换到 ready 状态
         self.set_state(StateReady)
 
@@ -183,6 +179,8 @@ class HumanContainer:
             yield final_data
 
     def _produce_audio_data(self, speech: np.ndarray):
+        if speech is None:
+            return
         audio_data = Data(
             data=speech,
             is_final=False,
@@ -219,27 +217,22 @@ class HumanContainer:
                     if len(answer) > 0 and not is_final:
                         # todo, 判断 answer是否仅为标点符号, 以及做一定的组装后再调用 tts model
                         logging.info(f"Answer: {answer}, is_final={is_final}")
-                        try:
-                            if stream:
-                                self.tts_model.streaming_inference(answer)
-                            else:
-                                speech = self.tts_model.inference(answer)
-                                self._produce_audio_data(speech)
-                        except Exception as e:
-                            logging.info(f"Inference error: {e}")
-                            traceback.print_exc()
-                            continue
+                        if stream:
+                            self.tts_model.streaming_inference(answer)
+                        else:
+                            speech = self.tts_model.inference(answer)
+                            self._produce_audio_data(speech)
                     elif len(answer) == 0 and not is_final:
                         continue
                     else:
                         logging.info("final frame")
+                        self.tts_model.complete()
                         self.audio_queue.put(
                             Data(
                                 data=None,
                                 is_final=True
                             )
                         )
-                self.tts_model.complete()
             except Exception as e:
                 logging.info(f"Process text data error: {e}, text: {text_data.get('data')}")
                 traceback.print_exc()
@@ -310,7 +303,7 @@ class HumanContainer:
             is_final = False
             silence = True
             audio_frame_batch = []
-            for i in range(self.batch_size * self.frame_multiple):
+            for i in range(self.batch_size):
                 audio_frame_data = self._read_audio_frame()
                 audio_chunk = audio_frame_data.get("data")
                 audio_frame_batch.append(self._make_audio_frame(audio_chunk))
@@ -336,14 +329,16 @@ class HumanContainer:
                     frame_index = self._mirror_frame_index(self.frame_index)
                     video_frame = self.frame_list_cycle[frame_index]
                     video_frame = self._make_video_frame(video_frame)
-                    asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame, self.frame_index), self.loop)
-                    for j in range(self.frame_multiple):
-                        audio_frame = audio_frame_batch[i * self.frame_multiple + j]
-                        asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
+                    asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
+                    audio_frame = audio_frame_batch[i]
+                    asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
                     self._update_frame_index(1)
             else:
                 # 当前状态为 busy, 切换为 speaking
-                self.swap_state(StateBusy, StateSpeaking)
+                if self.swap_state(StateBusy, StateSpeaking):
+                    self.frame_index -= self.track_sync.flush()
+                    while self.frame_index < 0:
+                        self.frame_index += self.frame_count
                 face_img_batch = []
                 for i in range(self.batch_size):
                     frame_index = self._mirror_frame_index(self.frame_index + i)
@@ -368,10 +363,9 @@ class HumanContainer:
                 for i, pred in enumerate(pred_img_batch):
                     frame_index = self._mirror_frame_index(self.frame_index)
                     video_frame = self._render_frame(pred, frame_index)
-                    asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame, self.frame_index), self.loop)
-                    for j in range(self.frame_multiple):
-                        audio_frame = audio_frame_batch[i * self.frame_multiple + j]
-                        asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
+                    asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
+                    audio_frame = audio_frame_batch[i]
+                    asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
                     self._update_frame_index(1)
 
             if is_final:

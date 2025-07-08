@@ -128,25 +128,27 @@ class AliTTSWrapper(TTSModelWrapper):
         assert self.inited
         try:
             self.streaming_synthesizer.streaming_call(text)
+        except TimeoutError:
+            logging.info(f"Timeout error")
+            return None
         except Exception as e:
             logging.info(f"Failed to stream inference: {e}")
             traceback.print_exc()
+            return None
 
     def inference(self, text):
         assert self.inited
-        for _ in range(self.retry_count):
-            try:
-                buffer_data = self.synthesizer.call(text)
-                if buffer_data is None:
-                    return None
-                return self._on_data(buffer_data)
-            except TimeoutError:
-                continue
-            except Exception as e:
-                logging.info(f"Failed to inference: {e}")
-                traceback.print_exc()
+        try:
+            buffer_data = self.synthesizer.call(text)
+            if buffer_data is None:
                 return None
-        return None
+            return self._on_data(buffer_data)
+        except TimeoutError:
+            return None
+        except Exception as e:
+            logging.info(f"Failed to inference: {e}")
+            traceback.print_exc()
+            return None
 
 
 if __name__ == '__main__':

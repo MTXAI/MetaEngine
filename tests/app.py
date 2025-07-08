@@ -9,11 +9,10 @@ from langchain_openai import ChatOpenAI
 from engine.agent.agents.custom import KnowledgeAgent
 from engine.agent.vecdb.chroma import try_load_db
 from engine.config import WAV2LIP_PLAYER_CONFIG, DEFAULT_PROJECT_CONFIG, ONE_API_LLM_MODEL
-from engine.human.avatar.wav2lip import Wav2LipWrapper, load_avatar
-from engine.human.player.player import HumanPlayer
-from engine.human.voice.tts_ali import AliTTSWrapper
-from engine.human.voice.tts_edge import EdgeTTSWrapper
-from engine.utils.data import Data
+from engine.human.avatar import Wav2LipWrapper
+from engine.human.player import HumanPlayer
+from engine.human.voice import AliTTSWrapper, EdgeTTSWrapper
+from engine.utils import Data
 
 a_f = '../avatars/wav2lip256_avatar1'
 c_f = '../checkpoints/wav2lip.pth'
@@ -30,7 +29,7 @@ tts_model = AliTTSWrapper(
 #     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
 # )
 
-avatar_model = Wav2LipWrapper(c_f)
+avatar_model = Wav2LipWrapper(c_f, a_f)
 
 # 创建Player实例并启动
 loop = asyncio.new_event_loop()
@@ -55,7 +54,6 @@ player = HumanPlayer(
     agent=agent,
     tts_model=tts_model,
     avatar_model=avatar_model,
-    avatar=load_avatar(a_f),
     loop=loop,
 )
 

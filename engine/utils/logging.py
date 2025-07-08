@@ -52,7 +52,7 @@ def setup_logger_dist(output=None,
         abbrev_name = name
 
     plain_formatter = logging.Formatter(
-        "[%(asctime)s] %(name)s %(levelname)s: %(message)s",
+        "[%(asctime)s.%(msecs)03d] %(name)s %(levelname)s: %(message)s",
         datefmt="%m/%d %H:%M:%S")
     # stdout logging: master only
     if distributed_rank == 0:
@@ -60,7 +60,7 @@ def setup_logger_dist(output=None,
         ch.setLevel(logging.DEBUG)
         if color:
             formatter = _ColorfulFormatter(
-                colored("[%(asctime)s %(name)s]: ", "green") + "%(message)s",
+                colored("[%(asctime)s.%(msecs)03d %(name)s]: ", "green") + "%(message)s",
                 datefmt="%m/%d %H:%M:%S",
                 root_name=name,
                 abbrev_name=str(abbrev_name),
@@ -100,7 +100,8 @@ def init_logging(log_file):
 
 
 if __name__ == '__main__':
-    init_logging()
+    from engine.config import DEFAULT_PROJECT_CONFIG
+    init_logging(DEFAULT_PROJECT_CONFIG.app_log_file)
 
     import logging
     logging.info("hello world")
