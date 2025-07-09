@@ -98,16 +98,6 @@ class HumanContainer:
     def get_state(self):
          return self.state.get_state()
 
-    def pause(self):
-        # 中断数字人当前对话
-        self.set_state(StatePause)
-        self.text_queue.queue.clear()
-        self.audio_queue.queue.clear()
-        self.audio_chunk_batch = []
-        self.audio_data_fragment = None
-        # 完成 flush 操作后, 切换到 ready 状态
-        self.set_state(StateReady)
-
     def flush_track(self):
         self.frame_index = self.track_sync.flush()
 
@@ -331,10 +321,11 @@ class HumanContainer:
                 audio_frame_batch = []
                 for i in range(self.batch_size * self.frame_multiple):
                     audio_frame_data = self._read_audio_frame()
-                    audio_chunk = audio_frame_data.get("data")
-                    audio_frame_batch.append(self._make_audio_frame(audio_chunk))
                     _is_final = audio_frame_data.get("is_final")
                     _state = audio_frame_data.get("state")
+
+                    audio_chunk = audio_frame_data.get("data")
+                    audio_frame_batch.append(self._make_audio_frame(audio_chunk))
                     if not is_final:
                         is_final = _is_final
                     if _state == 1:
@@ -345,7 +336,7 @@ class HumanContainer:
                     audio_feature_batch = self.avatar_model.encode_audio_feature(self.audio_chunk_batch, self.config)
                 else:
                     audio_feature_batch = None
-                self.audio_chunk_batch = self.audio_chunk_batch[self.batch_size * self.frame_multiple:]
+                self.audio_chunk_batch = []
                 if silence:
                     for i in range(self.batch_size):
                         frame_index = self._mirror_frame_index(self.frame_index)
@@ -386,7 +377,10 @@ class HumanContainer:
                         self._update_frame_index(1)
 
                 if is_final:
-                    # 当前状态为 speaking, 最后一个帧, 状态切换回 ready
+                    # 当前状态为 speaking, 等待 track 消费完最后一个帧, 状态切换回 ready
+                    frame_index = self.frame_index
+                    while self.track_sync.consumed_frame_count < frame_index:
+                        time.sleep(self.timeout)
                     self.swap_state(StateSpeaking, StateReady)
             except Exception as e:
                 logging.info(f"Process audio data error: {e}")

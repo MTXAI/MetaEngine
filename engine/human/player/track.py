@@ -9,14 +9,16 @@ from av.frame import Frame
 from av.packet import Packet
 
 from engine.config import PlayerConfig
+from engine.utils.concurrent import ObservableQueue
 
 
 class StreamTrackSync:
     def __init__(self, config: PlayerConfig):
         self.fps = config.fps
+        self.prefer = config.frame_sync_prefer
 
-        self.audio_queue = asyncio.Queue(self.fps*config.frame_multiple+self.fps)
-        self.video_queue = asyncio.Queue(self.fps+self.fps)
+        self.audio_queue = ObservableQueue(self.fps*config.frame_multiple+self.fps, wait_count=config.frame_multiple)
+        self.video_queue = ObservableQueue(self.fps+self.fps, wait_count=1)
 
         self.audio_ptime = config.audio_ptime
         self.video_ptime = config.video_ptime
@@ -33,23 +35,20 @@ class StreamTrackSync:
 
         self.consumed_frame_count = 0
 
-    def _clear_queue(self, q):
-        while not q.empty():
-            try:
-                q.get_nowait()
-                q.task_done()  # 如果使用了 join()，需要标记任务完成
-            except asyncio.QueueEmpty:
-                break
 
     def flush(self):
-        self._clear_queue(self.audio_queue)
-        self._clear_queue(self.video_queue)
+        self.audio_queue.clear()
+        self.video_queue.clear()
         return self.consumed_frame_count
 
     async def put_audio_frame(self, frame: AudioFrame):
+        if self.prefer == "video":
+            await self.video_queue.wait_for_data()
         await self.audio_queue.put(frame)
 
     async def put_video_frame(self, frame: VideoFrame):
+        if self.prefer == "audio":
+            await self.audio_queue.wait_for_data()
         await self.video_queue.put(frame)
 
     async def get_audio_frame(self) -> AudioFrame:

@@ -78,9 +78,6 @@ class HumanPlayer:
         self.container.tts_model = tts_model
         return True
 
-    def pause(self):
-        self.container.pause()
-
     def flush(self):
         self.container.flush()
 

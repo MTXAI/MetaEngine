@@ -89,6 +89,7 @@ class PlayerConfig(EasyConfig):
     video_ptime: float
     frame_multiple: int
     clock_rate: int
+    frame_sync_prefer: str
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -104,6 +105,7 @@ WAV2LIP_PLAYER_CONFIG = PlayerConfig(
         video_ptime=1/fps*frame_multiple,
         frame_multiple=frame_multiple,
         clock_rate=90000,
+        frame_sync_prefer="audio",
     )
 )
 
