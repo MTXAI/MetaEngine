@@ -13,52 +13,84 @@ from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, Stream
 from engine.human.voice import TTSModelWrapper
 from engine.runtime import thread_pool
 from engine.utils.concurrent.pool import TaskInfo
+from engine.utils import Data
 
 
 class HumanPlayer:
     def __init__(
             self,
             config: PlayerConfig,
+    ):
+        self.container: HumanContainer = None
+        self.config = config
+        self._start = False
+
+    def init_container(
+            self,
             agent: BaseAgent,
             tts_model: TTSModelWrapper,
             avatar_model: AvatarModelWrapper,
             loop: asyncio.AbstractEventLoop,
+            lazy_load: bool = False
     ):
-        self.config = config
-        self.track_sync = StreamTrackSync(
-            config,
-        )
-        self.audio_track = AudioStreamTrack(
-            config,
-            self.track_sync,
-        )
-        self.video_track = VideoStreamTrack(
-            config,
-            self.track_sync,
-        )
-        shared_state = HumanState(state=StateReady)
-        self.state = shared_state
+        if self.container is not None:
+            self.shutdown()
         self.container = HumanContainer(
-            config,
+            self.config,
             agent,
             tts_model,
             avatar_model,
-            self.track_sync,
             loop,
         )
-        self.loop = loop
-        self._start = False
-        self._speaking = False
+        if not lazy_load:
+            self.load_container()
 
-    def busy(self):
+    def load_container(self):
+        assert self.container is not None
+        self.container.load()
+
+    def is_ready(self):
+        return self.container.get_state() == StateReady
+
+    def is_busy(self):
         return self.container.get_state() == StateBusy or self.container.get_state() == StatePause
+
+    def get_track_sync(self):
+        return self.container.track_sync
+
+    def get_audio_track(self):
+        return self.container.audio_track
+
+    def get_video_track(self):
+        return self.container.video_track
+
+    def set_agent(self, agent: BaseAgent) -> bool:
+        # agent 正在使用中
+        if self.container.get_state() == StateBusy:
+            return False
+        self.container.agent = agent
+        return True
+
+    def set_tts_model(self, tts_model: TTSModelWrapper) -> bool:
+        # tts model 正在使用中
+        if self.container.get_state() == StateBusy:
+            return False
+        self.container.tts_model = tts_model
+        return True
+
+    def pause(self):
+        self.container.pause()
 
     def flush(self):
         self.container.flush()
 
+    def put_text_data(self, data: Data):
+        return self.container.put_text_data(data)
+
     def start(self):
         if self._start:
             return
+        assert self.is_ready()
         thread_pool.submit(
             self.container.process_text_data_worker,
             task_info=TaskInfo(
@@ -75,6 +107,7 @@ class HumanPlayer:
 
     def shutdown(self):
         self.container.shutdown()
+        self._start = False
 
 
 if __name__ == '__main__':
@@ -123,10 +156,13 @@ if __name__ == '__main__':
 
     player = HumanPlayer(
         config=WAV2LIP_PLAYER_CONFIG,
+    )
+    player.init_container(
         agent=agent,
         tts_model=tts_model,
         avatar_model=avatar_model,
         loop=loop,
+        lazy_load=False,
     )
 
     player.start()
@@ -137,11 +173,11 @@ if __name__ == '__main__':
         t = time.perf_counter()
         while True:
             await asyncio.sleep(0.01)
-            frame = await player.audio_track.recv()
+            frame = await player.get_audio_track().recv()
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                logging.info(f"{i}, {i / counttime}: {frame}, {player.track_sync.audio_queue.qsize()}")
+                logging.info(f"{i}, {i / counttime}: {frame}, {player.get_track_sync().audio_queue.qsize()}")
                 i = 0
                 counttime = 0
 
@@ -151,18 +187,18 @@ if __name__ == '__main__':
         while True:
             t = time.perf_counter()
             await asyncio.sleep(0.01)
-            frame = await player.video_track.recv()
+            frame = await player.get_video_track().recv()
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                logging.info(f"{i}, {i / counttime}: {frame}, {player.track_sync.video_queue.qsize()}")
+                logging.info(f"{i}, {i / counttime}: {frame}, {player.get_track_sync().video_queue.qsize()}")
                 i = 0
                 counttime = 0
 
     async def put_text_data():
         for i in range(1):
             player.flush()
-            res_data = player.container.put_text_data(Data(
+            res_data = player.put_text_data(Data(
                 data="介绍故宫",
                 is_chat=True,
                 stream=True,

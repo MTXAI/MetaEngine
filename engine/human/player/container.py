@@ -16,7 +16,7 @@ from engine.agent.agents.base_agent import BaseAgent
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper
 from engine.human.player.state import *
-from engine.human.player.track import StreamTrackSync
+from engine.human.player.track import StreamTrackSync, AudioStreamTrack, VideoStreamTrack
 from engine.human.voice.voice import TTSModelWrapper
 from engine.utils.data import Data
 
@@ -29,20 +29,33 @@ class HumanContainer:
             agent: BaseAgent,
             tts_model: TTSModelWrapper,
             avatar_model: AvatarModelWrapper,
-            track_sync: StreamTrackSync,
             loop: asyncio.AbstractEventLoop,
     ):
         self.config = config
         self.agent = agent
         self.tts_model = tts_model
         self.avatar_model = avatar_model
-        self.avatar = self.avatar_model.load_avatar()
-        self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = self.avatar
-        self.track_sync = track_sync
         self.loop = loop
 
+        # track
+        self.track_sync = StreamTrackSync(
+            self.config,
+        )
+        self.audio_track = AudioStreamTrack(
+            self.config,
+            self.track_sync,
+        )
+        self.video_track = VideoStreamTrack(
+            self.config,
+            self.track_sync,
+        )
+
+        # avatar
+        self.avatar: Tuple = None
+        self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = None, None, None
+
         # runtime control
-        self.state =  HumanState(StateReady)
+        self.state =  HumanState(StateNotReady)
         self.stop_event = threading.Event()
 
         # data flow
@@ -53,8 +66,12 @@ class HumanContainer:
         self.fps = config.fps
         self.sample_rate = config.sample_rate
         self.timeout = config.timeout
+        self.warmup_iters = config.warmup_iters
+        self.window_left = config.warmup_iters // 2
+        self.window_right = config.warmup_iters // 2
         self.audio_ptime = config.audio_ptime
         self.video_ptime = config.video_ptime
+        self.frame_multiple = config.frame_multiple
         self.chunk_size = int(self.sample_rate / self.fps)
         self.batch_size = config.batch_size
 
@@ -63,7 +80,13 @@ class HumanContainer:
         self.audio_data_count = 0
         self.audio_chunk_batch = []
         self.frame_index = 0
+        self.frame_count = 0
+
+    def load(self):
+        self.avatar = self.avatar_model.load_avatar()
+        self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = self.avatar
         self.frame_count = len(self.frame_list_cycle)
+        self.set_state(StateReady)
 
     def swap_state(self, old_state: int, new_state: int):
         res = self.state.swap_state(old_state, new_state)
@@ -89,7 +112,7 @@ class HumanContainer:
         self.set_state(StateReady)
 
     def flush_track(self):
-        self.frame_index = self.track_sync.flush()
+        self.frame_index -= self.track_sync.flush()
 
     def flush(self):
         # 中断数字人当前对话
@@ -207,6 +230,7 @@ class HumanContainer:
         :return:
         """
         while not self.stop_event.is_set():
+
             try:
                 text_data = self.text_queue.get(timeout=1)
             except queue.Empty:
@@ -274,6 +298,8 @@ class HumanContainer:
 
     def _update_frame_index(self, n):
         self.frame_index += n
+        if self._mirror_frame_index(self.frame_index) == 0:
+            self.frame_index  = 0
 
     def _make_audio_frame(self, chunk):
         chunk = (chunk * 32767).astype(np.int16)
@@ -305,7 +331,7 @@ class HumanContainer:
             is_final = False
             silence = True
             audio_frame_batch = []
-            for i in range(self.batch_size):
+            for i in range(self.batch_size*self.frame_multiple):
                 audio_frame_data = self._read_audio_frame()
                 audio_chunk = audio_frame_data.get("data")
                 audio_frame_batch.append(self._make_audio_frame(audio_chunk))
@@ -317,23 +343,27 @@ class HumanContainer:
                     silence = False
                 chunk = audio_frame_data.get("data")
                 self.audio_chunk_batch.append(chunk)
-            try:
-                audio_feature_batch = self.avatar_model.encode_audio_feature(self.audio_chunk_batch, self.config)
-            except Exception as e:
-                logging.info(f"Encode audio feature error: {e}")
-                traceback.print_exc()
-                # 遇到错误, 状态重置为 ready
-                self.set_state(StateReady)
-                continue
-            self.audio_chunk_batch = self.audio_chunk_batch[self.batch_size:]
+            if not silence:
+                try:
+                    audio_feature_batch = self.avatar_model.encode_audio_feature(self.audio_chunk_batch, self.config)
+                except Exception as e:
+                    logging.info(f"Encode audio feature error: {e}")
+                    traceback.print_exc()
+                    # 遇到错误, 状态重置为 ready
+                    self.set_state(StateReady)
+                    continue
+            else:
+                audio_feature_batch = None
+            self.audio_chunk_batch = self.audio_chunk_batch[self.batch_size*self.frame_multiple:]
             if silence:
                 for i in range(self.batch_size):
                     frame_index = self._mirror_frame_index(self.frame_index)
                     video_frame = self.frame_list_cycle[frame_index]
                     video_frame = self._make_video_frame(video_frame)
                     asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
-                    audio_frame = audio_frame_batch[i]
-                    asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
+                    audio_frames = audio_frame_batch[i*self.frame_multiple:i*self.frame_multiple+self.frame_multiple]
+                    for audio_frame in audio_frames:
+                        asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
                     self._update_frame_index(1)
             else:
                 # 当前状态为 busy, 切换为 speaking
@@ -364,8 +394,9 @@ class HumanContainer:
                     frame_index = self._mirror_frame_index(self.frame_index)
                     video_frame = self._render_frame(pred, frame_index)
                     asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
-                    audio_frame = audio_frame_batch[i]
-                    asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
+                    audio_frames = audio_frame_batch[i*self.frame_multiple:i*self.frame_multiple+self.frame_multiple]
+                    for audio_frame in audio_frames:
+                        asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
                     self._update_frame_index(1)
 
             if is_final:
@@ -374,4 +405,5 @@ class HumanContainer:
 
     def shutdown(self):
         self.stop_event.set()
+        self.set_state(StateNotReady)
 

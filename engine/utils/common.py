@@ -51,7 +51,7 @@ class EasyDict(dict):
             else:
                 value_str = f"{type(value).__name__}_{id(value)}"
             text += key + ': ' + value_str
-        return '{%s}}' % text
+        return '{%s}' % text
 
 
 def get_device_and_start_method() -> Tuple[str, str]:

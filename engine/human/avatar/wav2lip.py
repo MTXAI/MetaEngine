@@ -1,5 +1,4 @@
 import glob
-import logging
 import os
 import pickle
 from typing import List
@@ -9,24 +8,12 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
+from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG, frame_multiple
 from engine.human.avatar.avatar import AvatarModelWrapper
 from models.wav2lip import Wav2Lip
 from models.wav2lip.audio import melspectrogram
+from models.wav2lip.hparams import hparams
 
-
-def load_model(path):
-    model = Wav2Lip()
-    logging.info("Load checkpoint from: {}".format(path))
-    checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
-    s = checkpoint["state_dict"]
-    new_s = {}
-    for k, v in s.items():
-        new_s[k.replace('module.', '')] = v
-    model.load_state_dict(new_s)
-
-    model = model.to(DEFAULT_RUNTIME_CONFIG.device)
-    return model.eval()
 
 def _read_imgs(img_list):
     frames = []
@@ -41,7 +28,17 @@ class Wav2LipWrapper(AvatarModelWrapper):
         super().__init__()
         self.ckpt_path = ckpt_path
         self.avatar_path = avatar_path
-        self.model = load_model(ckpt_path)
+        self.backbone = self.load_backbone()
+
+    def load_backbone(self):
+        model = Wav2Lip().to(DEFAULT_RUNTIME_CONFIG.device)
+        checkpoint = torch.load(self.ckpt_path, map_location=lambda storage, loc: storage)
+        s = checkpoint["state_dict"]
+        new_s = {}
+        for k, v in s.items():
+            new_s[k.replace('module.', '')] = v
+        model.load_state_dict(new_s)
+        return model.eval()
 
     def load_avatar(self):
         full_imgs_path = f"{self.avatar_path}/full_imgs"
@@ -66,11 +63,12 @@ class Wav2LipWrapper(AvatarModelWrapper):
         mel = melspectrogram(frames)
 
         batch_size = config.batch_size
-        mel_step_size = 16
+        frame_multiple = config.frame_multiple
+        mel_step_size = batch_size
         i = 0
         audio_feature_batch = []
         while i < batch_size:
-            start_idx = 0
+            start_idx = i*frame_multiple
             if start_idx + mel_step_size > len(mel[0]):
                 audio_feature_batch.append(mel[:, len(mel[0]) - mel_step_size:])
             else:
@@ -87,7 +85,7 @@ class Wav2LipWrapper(AvatarModelWrapper):
             audio_feature_batch = audio_feature_batch.unsqueeze(-1)
         audio_feature_batch = audio_feature_batch.permute(0, 3, 1, 2)
         face_img_batch = face_img_batch.permute(0, 3, 1, 2)
-        pred_img_batch = self.model(audio_feature_batch, face_img_batch)
+        pred_img_batch = self.backbone(audio_feature_batch, face_img_batch)
         pred_img_batch = pred_img_batch.cpu().numpy().transpose(0, 2, 3, 1) * 255.
         return pred_img_batch
 

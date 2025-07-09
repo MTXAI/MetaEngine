@@ -1,11 +1,13 @@
 from engine.utils.concurrent.lock import RWLock
 
 
+StateNotReady = -1
 StateReady = 0
 StateBusy = 1
 StateSpeaking = 2
 StatePause = 3
 state_str = {
+    StateNotReady: "StateNotReady",
     StateReady: "StateReady",
     StateBusy: "StateBusy",
     StateSpeaking: "StateSpeaking",

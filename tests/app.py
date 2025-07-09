@@ -17,17 +17,20 @@ from engine.utils import Data
 a_f = '../avatars/wav2lip256_avatar1'
 c_f = '../checkpoints/wav2lip.pth'
 
-tts_model = AliTTSWrapper(
+tts_model_ali = AliTTSWrapper(
     model_str="cosyvoice-v1",
     api_key="sk-361f246a74c9421085d1d137038d5064",
     voice_type="longxiaochun",
     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
 )
 
-# tts_model = EdgeTTSWrapper(
-#     voice_type="zh-CN-YunxiaNeural",
-#     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
-# )
+tts_model_edge = EdgeTTSWrapper(
+    voice_type="zh-CN-YunxiaNeural",
+    sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
+)
+
+tts_models = [tts_model_ali, tts_model_edge]
+tts_model_idx = 0
 
 avatar_model = Wav2LipWrapper(c_f, a_f)
 
@@ -51,10 +54,13 @@ agent = KnowledgeAgent(llm_model, vector_store)
 
 player = HumanPlayer(
     config=WAV2LIP_PLAYER_CONFIG,
+)
+player.init_container(
     agent=agent,
-    tts_model=tts_model,
+    tts_model=tts_models[tts_model_idx],
     avatar_model=avatar_model,
     loop=loop,
+    lazy_load=True,
 )
 
 # 存储已连接的客户端
@@ -110,8 +116,8 @@ async def websocket_handler(request):
                     pc = RTCPeerConnection()
 
                     # 创建并添加音视频轨道
-                    audio_track = player.audio_track
-                    video_track = player.video_track
+                    audio_track = player.get_audio_track()
+                    video_track = player.get_video_track()
 
                     pc.addTrack(audio_track)
                     pc.addTrack(video_track)
@@ -161,9 +167,9 @@ async def websocket_handler(request):
 async def echo(request):
     data = await request.json()
     text = data.get('text')
-    if text and not player.busy():
+    if text and not player.is_busy():
         player.flush()
-        res_data = player.container.put_text_data(
+        res_data = player.put_text_data(
             Data(
                 data=text,
                 is_chat=False,
@@ -180,9 +186,9 @@ async def echo(request):
 async def chat(request):
     data = await request.json()
     question = data.get('question')
-    if question and not player.busy():
+    if question and not player.is_busy():
         player.flush()
-        res_data = player.container.put_text_data(
+        res_data = player.put_text_data(
             Data(
                 data=question,
                 is_chat=True,
@@ -210,6 +216,7 @@ def main():
     site = web.TCPSite(runner, "0.0.0.0", 8080)
     loop.run_until_complete(site.start())
 
+    player.load_container()  # test lazy load
     player.start()
 
     logging.info("服务器已启动，访问 http://localhost:8080")
