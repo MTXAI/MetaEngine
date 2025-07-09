@@ -1,5 +1,4 @@
 import glob
-import logging
 import os
 import pickle
 from typing import List
@@ -9,10 +8,11 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
+from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG, frame_multiple
 from engine.human.avatar.avatar import AvatarModelWrapper
 from models.wav2lip import Wav2Lip
 from models.wav2lip.audio import melspectrogram
+from models.wav2lip.hparams import hparams
 
 
 def _read_imgs(img_list):
@@ -62,11 +62,16 @@ class Wav2LipWrapper(AvatarModelWrapper):
         frames = np.concatenate(frame_batch)
         mel = melspectrogram(frames)
 
-        left = 16
-        right = 36
+        fps = config.fps
         batch_size = config.batch_size
-        mel_step_size = 16
-        mel_idx_multiplier = 3.2
+        warmup_iters = config.warmup_iters
+        frame_multiple = config.frame_multiple
+        num_mels = hparams.num_mels
+
+        window_left = warmup_iters // 2
+        left = window_left * num_mels // fps
+        mel_step_size = batch_size
+        mel_idx_multiplier = num_mels * frame_multiple // fps
         i = 0
         audio_feature_batch = []
         while i < batch_size:

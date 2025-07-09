@@ -66,8 +66,12 @@ class HumanContainer:
         self.fps = config.fps
         self.sample_rate = config.sample_rate
         self.timeout = config.timeout
+        self.warmup_iters = config.warmup_iters
+        self.window_left = config.warmup_iters // 2
+        self.window_right = config.warmup_iters // 2
         self.audio_ptime = config.audio_ptime
         self.video_ptime = config.video_ptime
+        self.frame_multiple = config.frame_multiple
         self.chunk_size = int(self.sample_rate / self.fps)
         self.batch_size = config.batch_size
 
@@ -295,6 +299,8 @@ class HumanContainer:
 
     def _update_frame_index(self, n):
         self.frame_index += n
+        if self._mirror_frame_index(self.frame_index) == 0:
+            self.frame_index  = 0
 
     def _make_audio_frame(self, chunk):
         chunk = (chunk * 32767).astype(np.int16)
@@ -318,12 +324,12 @@ class HumanContainer:
         return frame
 
     def _warmup(self):
-        for i in range(20):
+        for i in range(self.warmup_iters):
             audio_frame_data = self._read_audio_frame()
             audio_chunk = audio_frame_data.get("data")
             self.audio_chunk_batch.append(audio_chunk)
             self.audio_frame_batch.append(self._make_audio_frame(audio_chunk))
-        for _ in range(10):
+        for _ in range(self.window_left):
             self.audio_frame_batch.pop(0)
 
     def process_audio_data_worker(self):
@@ -335,7 +341,7 @@ class HumanContainer:
                 continue
             is_final = False
             silence = True
-            for i in range(self.batch_size*2):
+            for i in range(self.batch_size*self.frame_multiple):
                 audio_frame_data = self._read_audio_frame()
                 audio_chunk = audio_frame_data.get("data")
                 self.audio_frame_batch.append(self._make_audio_frame(audio_chunk))
@@ -358,16 +364,16 @@ class HumanContainer:
                     continue
             else:
                 audio_feature_batch = None
-            self.audio_chunk_batch = self.audio_chunk_batch[self.batch_size*2:]
-            audio_frame_batch = self.audio_frame_batch[:self.batch_size*2]
-            self.audio_frame_batch = self.audio_frame_batch[self.batch_size*2:]
+            self.audio_chunk_batch = self.audio_chunk_batch[self.batch_size*self.frame_multiple:]
+            audio_frame_batch = self.audio_frame_batch[:self.batch_size*self.frame_multiple]
+            self.audio_frame_batch = self.audio_frame_batch[self.batch_size*self.frame_multiple:]
             if silence:
                 for i in range(self.batch_size):
                     frame_index = self._mirror_frame_index(self.frame_index)
                     video_frame = self.frame_list_cycle[frame_index]
                     video_frame = self._make_video_frame(video_frame)
                     asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
-                    audio_frames = audio_frame_batch[i*2:i*2+2]
+                    audio_frames = audio_frame_batch[i*self.frame_multiple:i*self.frame_multiple+self.frame_multiple]
                     for audio_frame in audio_frames:
                         asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
                     self._update_frame_index(1)
@@ -400,7 +406,7 @@ class HumanContainer:
                     frame_index = self._mirror_frame_index(self.frame_index)
                     video_frame = self._render_frame(pred, frame_index)
                     asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
-                    audio_frames = audio_frame_batch[i*2:i*2+2]
+                    audio_frames = audio_frame_batch[i*self.frame_multiple:i*self.frame_multiple+self.frame_multiple]
                     for audio_frame in audio_frames:
                         asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
                     self._update_frame_index(1)

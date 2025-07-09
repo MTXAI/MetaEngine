@@ -15,7 +15,7 @@ class StreamTrackSync:
     def __init__(self, config: PlayerConfig):
         self.fps = config.fps
 
-        self.audio_queue = asyncio.Queue(self.fps*2)
+        self.audio_queue = asyncio.Queue(self.fps*config.frame_multiple)
         self.video_queue = asyncio.Queue(self.fps)
 
         self.lock = asyncio.Lock()
@@ -32,6 +32,7 @@ class StreamTrackSync:
     def flush(self):
         self._clear_queue(self.audio_queue)
         self._clear_queue(self.video_queue)
+        return self.real_frame_index
 
     async def put_audio_frame(self, frame: AudioFrame):
         await self.audio_queue.put(frame)

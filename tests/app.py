@@ -17,17 +17,20 @@ from engine.utils import Data
 a_f = '../avatars/wav2lip256_avatar1'
 c_f = '../checkpoints/wav2lip.pth'
 
-tts_model = AliTTSWrapper(
+tts_model_ali = AliTTSWrapper(
     model_str="cosyvoice-v1",
     api_key="sk-361f246a74c9421085d1d137038d5064",
     voice_type="longxiaochun",
     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
 )
 
-# tts_model = EdgeTTSWrapper(
-#     voice_type="zh-CN-YunxiaNeural",
-#     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
-# )
+tts_model_edge = EdgeTTSWrapper(
+    voice_type="zh-CN-YunxiaNeural",
+    sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
+)
+
+tts_models = [tts_model_ali, tts_model_edge]
+tts_model_idx = 1
 
 avatar_model = Wav2LipWrapper(c_f, a_f)
 
@@ -54,7 +57,7 @@ player = HumanPlayer(
 )
 player.init_container(
     agent=agent,
-    tts_model=tts_model,
+    tts_model=tts_models[tts_model_idx],
     avatar_model=avatar_model,
     loop=loop,
     lazy_load=True,
