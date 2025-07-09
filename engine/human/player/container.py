@@ -75,6 +75,7 @@ class HumanContainer:
         self.audio_data_fragment = None
         self.audio_data_count = 0
         self.audio_chunk_batch = []
+        self.audio_frame_batch = []
         self.frame_index = 0
         self.frame_count = 0
 
@@ -316,7 +317,17 @@ class HumanContainer:
         frame = self._make_video_frame(frame)
         return frame
 
+    def _warmup(self):
+        for i in range(20):
+            audio_frame_data = self._read_audio_frame()
+            audio_chunk = audio_frame_data.get("data")
+            self.audio_chunk_batch.append(audio_chunk)
+            self.audio_frame_batch.append(self._make_audio_frame(audio_chunk))
+        for _ in range(10):
+            self.audio_frame_batch.pop(0)
+
     def process_audio_data_worker(self):
+        self._warmup()
         while not self.stop_event.is_set():
             # 当前状态可能为 ready, busy 和 speaking, 状态为 pause, 在进行 flush 操作, 暂时不继续读取帧
             if self.get_state() == StatePause:
@@ -324,11 +335,10 @@ class HumanContainer:
                 continue
             is_final = False
             silence = True
-            audio_frame_batch = []
-            for i in range(self.batch_size):
+            for i in range(self.batch_size*2):
                 audio_frame_data = self._read_audio_frame()
                 audio_chunk = audio_frame_data.get("data")
-                audio_frame_batch.append(self._make_audio_frame(audio_chunk))
+                self.audio_frame_batch.append(self._make_audio_frame(audio_chunk))
                 _is_final = audio_frame_data.get("is_final")
                 _state = audio_frame_data.get("state")
                 if not is_final:
@@ -337,23 +347,29 @@ class HumanContainer:
                     silence = False
                 chunk = audio_frame_data.get("data")
                 self.audio_chunk_batch.append(chunk)
-            try:
-                audio_feature_batch = self.avatar_model.encode_audio_feature(self.audio_chunk_batch, self.config)
-            except Exception as e:
-                logging.info(f"Encode audio feature error: {e}")
-                traceback.print_exc()
-                # 遇到错误, 状态重置为 ready
-                self.set_state(StateReady)
-                continue
-            self.audio_chunk_batch = self.audio_chunk_batch[self.batch_size:]
+            if not silence:
+                try:
+                    audio_feature_batch = self.avatar_model.encode_audio_feature(self.audio_chunk_batch, self.config)
+                except Exception as e:
+                    logging.info(f"Encode audio feature error: {e}")
+                    traceback.print_exc()
+                    # 遇到错误, 状态重置为 ready
+                    self.set_state(StateReady)
+                    continue
+            else:
+                audio_feature_batch = None
+            self.audio_chunk_batch = self.audio_chunk_batch[self.batch_size*2:]
+            audio_frame_batch = self.audio_frame_batch[:self.batch_size*2]
+            self.audio_frame_batch = self.audio_frame_batch[self.batch_size*2:]
             if silence:
                 for i in range(self.batch_size):
                     frame_index = self._mirror_frame_index(self.frame_index)
                     video_frame = self.frame_list_cycle[frame_index]
                     video_frame = self._make_video_frame(video_frame)
                     asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
-                    audio_frame = audio_frame_batch[i]
-                    asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
+                    audio_frames = audio_frame_batch[i*2:i*2+2]
+                    for audio_frame in audio_frames:
+                        asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
                     self._update_frame_index(1)
             else:
                 # 当前状态为 busy, 切换为 speaking
@@ -384,8 +400,9 @@ class HumanContainer:
                     frame_index = self._mirror_frame_index(self.frame_index)
                     video_frame = self._render_frame(pred, frame_index)
                     asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
-                    audio_frame = audio_frame_batch[i]
-                    asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
+                    audio_frames = audio_frame_batch[i*2:i*2+2]
+                    for audio_frame in audio_frames:
+                        asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
                     self._update_frame_index(1)
 
             if is_final:

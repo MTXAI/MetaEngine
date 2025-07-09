@@ -31,7 +31,7 @@ class Wav2LipWrapper(AvatarModelWrapper):
         self.backbone = self.load_backbone()
 
     def load_backbone(self):
-        model = Wav2Lip()
+        model = Wav2Lip().to(DEFAULT_RUNTIME_CONFIG.device)
         checkpoint = torch.load(self.ckpt_path, map_location=lambda storage, loc: storage)
         s = checkpoint["state_dict"]
         new_s = {}
@@ -62,12 +62,15 @@ class Wav2LipWrapper(AvatarModelWrapper):
         frames = np.concatenate(frame_batch)
         mel = melspectrogram(frames)
 
+        left = 16
+        right = 36
         batch_size = config.batch_size
         mel_step_size = 16
+        mel_idx_multiplier = 3.2
         i = 0
         audio_feature_batch = []
         while i < batch_size:
-            start_idx = 0
+            start_idx = int(left + i * mel_idx_multiplier)
             if start_idx + mel_step_size > len(mel[0]):
                 audio_feature_batch.append(mel[:, len(mel[0]) - mel_step_size:])
             else:

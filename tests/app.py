@@ -108,9 +108,6 @@ async def websocket_handler(request):
             if msg.type == web.WSMsgType.TEXT:
                 data = msg.json()
                 if data["type"] == "offer":
-                    player.load_container()  # test lazy load
-                    player.start()
-
                     # 处理客户端的 offer
                     offer = RTCSessionDescription(sdp=data["sdp"], type="offer")
                     pc = RTCPeerConnection()
@@ -215,6 +212,9 @@ def main():
     loop.run_until_complete(runner.setup())
     site = web.TCPSite(runner, "0.0.0.0", 8080)
     loop.run_until_complete(site.start())
+
+    player.load_container()  # test lazy load
+    player.start()
 
     logging.info("服务器已启动，访问 http://localhost:8080")
     loop.run_forever()
