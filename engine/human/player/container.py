@@ -79,7 +79,6 @@ class HumanContainer:
         self.audio_data_fragment = None
         self.audio_data_count = 0
         self.audio_chunk_batch = []
-        self.audio_frame_batch = []
         self.frame_index = 0
         self.frame_count = 0
 
@@ -113,7 +112,7 @@ class HumanContainer:
         self.set_state(StateReady)
 
     def flush_track(self):
-        self.frame_index = self.track_sync.flush()
+        self.frame_index -= self.track_sync.flush()
 
     def flush(self):
         # 中断数字人当前对话
@@ -323,17 +322,7 @@ class HumanContainer:
         frame = self._make_video_frame(frame)
         return frame
 
-    def _warmup(self):
-        for i in range(self.warmup_iters):
-            audio_frame_data = self._read_audio_frame()
-            audio_chunk = audio_frame_data.get("data")
-            self.audio_chunk_batch.append(audio_chunk)
-            self.audio_frame_batch.append(self._make_audio_frame(audio_chunk))
-        for _ in range(self.window_left):
-            self.audio_frame_batch.pop(0)
-
     def process_audio_data_worker(self):
-        self._warmup()
         while not self.stop_event.is_set():
             # 当前状态可能为 ready, busy 和 speaking, 状态为 pause, 在进行 flush 操作, 暂时不继续读取帧
             if self.get_state() == StatePause:
@@ -341,10 +330,11 @@ class HumanContainer:
                 continue
             is_final = False
             silence = True
+            audio_frame_batch = []
             for i in range(self.batch_size*self.frame_multiple):
                 audio_frame_data = self._read_audio_frame()
                 audio_chunk = audio_frame_data.get("data")
-                self.audio_frame_batch.append(self._make_audio_frame(audio_chunk))
+                audio_frame_batch.append(self._make_audio_frame(audio_chunk))
                 _is_final = audio_frame_data.get("is_final")
                 _state = audio_frame_data.get("state")
                 if not is_final:
@@ -365,8 +355,6 @@ class HumanContainer:
             else:
                 audio_feature_batch = None
             self.audio_chunk_batch = self.audio_chunk_batch[self.batch_size*self.frame_multiple:]
-            audio_frame_batch = self.audio_frame_batch[:self.batch_size*self.frame_multiple]
-            self.audio_frame_batch = self.audio_frame_batch[self.batch_size*self.frame_multiple:]
             if silence:
                 for i in range(self.batch_size):
                     frame_index = self._mirror_frame_index(self.frame_index)

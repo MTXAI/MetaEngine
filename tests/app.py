@@ -30,7 +30,7 @@ tts_model_edge = EdgeTTSWrapper(
 )
 
 tts_models = [tts_model_ali, tts_model_edge]
-tts_model_idx = 1
+tts_model_idx = 0
 
 avatar_model = Wav2LipWrapper(c_f, a_f)
 

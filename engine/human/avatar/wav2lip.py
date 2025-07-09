@@ -62,20 +62,13 @@ class Wav2LipWrapper(AvatarModelWrapper):
         frames = np.concatenate(frame_batch)
         mel = melspectrogram(frames)
 
-        fps = config.fps
         batch_size = config.batch_size
-        warmup_iters = config.warmup_iters
         frame_multiple = config.frame_multiple
-        num_mels = hparams.num_mels
-
-        window_left = warmup_iters // 2
-        left = window_left * num_mels // fps
         mel_step_size = batch_size
-        mel_idx_multiplier = num_mels * frame_multiple // fps
         i = 0
         audio_feature_batch = []
         while i < batch_size:
-            start_idx = int(left + i * mel_idx_multiplier)
+            start_idx = i*frame_multiple
             if start_idx + mel_step_size > len(mel[0]):
                 audio_feature_batch.append(mel[:, len(mel[0]) - mel_step_size:])
             else:
