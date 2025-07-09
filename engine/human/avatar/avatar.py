@@ -16,6 +16,13 @@ class AvatarModelWrapper(nn.Module):
         """
         pass
 
+    def load_backbone(self) -> nn.Module:
+        """
+        加载 backbone 模型
+        :return: backbone
+        """
+        pass
+
     def load_avatar(self) -> Tuple[List, List, List]:
         """
         加载 avatar 资源

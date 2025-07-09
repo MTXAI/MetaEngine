@@ -51,10 +51,13 @@ agent = KnowledgeAgent(llm_model, vector_store)
 
 player = HumanPlayer(
     config=WAV2LIP_PLAYER_CONFIG,
+)
+player.init_container(
     agent=agent,
     tts_model=tts_model,
     avatar_model=avatar_model,
     loop=loop,
+    lazy_load=True,
 )
 
 # 存储已连接的客户端
@@ -105,13 +108,16 @@ async def websocket_handler(request):
             if msg.type == web.WSMsgType.TEXT:
                 data = msg.json()
                 if data["type"] == "offer":
+                    player.load_container()  # test lazy load
+                    player.start()
+
                     # 处理客户端的 offer
                     offer = RTCSessionDescription(sdp=data["sdp"], type="offer")
                     pc = RTCPeerConnection()
 
                     # 创建并添加音视频轨道
-                    audio_track = player.audio_track
-                    video_track = player.video_track
+                    audio_track = player.get_audio_track()
+                    video_track = player.get_video_track()
 
                     pc.addTrack(audio_track)
                     pc.addTrack(video_track)
@@ -161,9 +167,9 @@ async def websocket_handler(request):
 async def echo(request):
     data = await request.json()
     text = data.get('text')
-    if text and not player.busy():
+    if text and not player.is_busy():
         player.flush()
-        res_data = player.container.put_text_data(
+        res_data = player.put_text_data(
             Data(
                 data=text,
                 is_chat=False,
@@ -180,9 +186,9 @@ async def echo(request):
 async def chat(request):
     data = await request.json()
     question = data.get('question')
-    if question and not player.busy():
+    if question and not player.is_busy():
         player.flush()
-        res_data = player.container.put_text_data(
+        res_data = player.put_text_data(
             Data(
                 data=question,
                 is_chat=True,
@@ -209,8 +215,6 @@ def main():
     loop.run_until_complete(runner.setup())
     site = web.TCPSite(runner, "0.0.0.0", 8080)
     loop.run_until_complete(site.start())
-
-    player.start()
 
     logging.info("服务器已启动，访问 http://localhost:8080")
     loop.run_forever()

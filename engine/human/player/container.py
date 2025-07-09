@@ -16,7 +16,7 @@ from engine.agent.agents.base_agent import BaseAgent
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper
 from engine.human.player.state import *
-from engine.human.player.track import StreamTrackSync
+from engine.human.player.track import StreamTrackSync, AudioStreamTrack, VideoStreamTrack
 from engine.human.voice.voice import TTSModelWrapper
 from engine.utils.data import Data
 
@@ -29,20 +29,33 @@ class HumanContainer:
             agent: BaseAgent,
             tts_model: TTSModelWrapper,
             avatar_model: AvatarModelWrapper,
-            track_sync: StreamTrackSync,
             loop: asyncio.AbstractEventLoop,
     ):
         self.config = config
         self.agent = agent
         self.tts_model = tts_model
         self.avatar_model = avatar_model
-        self.avatar = self.avatar_model.load_avatar()
-        self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = self.avatar
-        self.track_sync = track_sync
         self.loop = loop
 
+        # track
+        self.track_sync = StreamTrackSync(
+            self.config,
+        )
+        self.audio_track = AudioStreamTrack(
+            self.config,
+            self.track_sync,
+        )
+        self.video_track = VideoStreamTrack(
+            self.config,
+            self.track_sync,
+        )
+
+        # avatar
+        self.avatar: Tuple = None
+        self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = None, None, None
+
         # runtime control
-        self.state =  HumanState(StateReady)
+        self.state =  HumanState(StateNotReady)
         self.stop_event = threading.Event()
 
         # data flow
@@ -63,7 +76,13 @@ class HumanContainer:
         self.audio_data_count = 0
         self.audio_chunk_batch = []
         self.frame_index = 0
+        self.frame_count = 0
+
+    def load(self):
+        self.avatar = self.avatar_model.load_avatar()
+        self.frame_list_cycle, self.face_list_cycle, self.coord_list_cycle = self.avatar
         self.frame_count = len(self.frame_list_cycle)
+        self.set_state(StateReady)
 
     def swap_state(self, old_state: int, new_state: int):
         res = self.state.swap_state(old_state, new_state)
@@ -207,6 +226,7 @@ class HumanContainer:
         :return:
         """
         while not self.stop_event.is_set():
+
             try:
                 text_data = self.text_queue.get(timeout=1)
             except queue.Empty:
@@ -374,4 +394,5 @@ class HumanContainer:
 
     def shutdown(self):
         self.stop_event.set()
+        self.set_state(StateNotReady)
 

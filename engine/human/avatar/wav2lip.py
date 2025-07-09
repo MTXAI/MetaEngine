@@ -15,19 +15,6 @@ from models.wav2lip import Wav2Lip
 from models.wav2lip.audio import melspectrogram
 
 
-def load_model(path):
-    model = Wav2Lip()
-    logging.info("Load checkpoint from: {}".format(path))
-    checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
-    s = checkpoint["state_dict"]
-    new_s = {}
-    for k, v in s.items():
-        new_s[k.replace('module.', '')] = v
-    model.load_state_dict(new_s)
-
-    model = model.to(DEFAULT_RUNTIME_CONFIG.device)
-    return model.eval()
-
 def _read_imgs(img_list):
     frames = []
     for img_path in tqdm(img_list):
@@ -41,7 +28,17 @@ class Wav2LipWrapper(AvatarModelWrapper):
         super().__init__()
         self.ckpt_path = ckpt_path
         self.avatar_path = avatar_path
-        self.model = load_model(ckpt_path)
+        self.backbone = self.load_backbone()
+
+    def load_backbone(self):
+        model = Wav2Lip()
+        checkpoint = torch.load(self.ckpt_path, map_location=lambda storage, loc: storage)
+        s = checkpoint["state_dict"]
+        new_s = {}
+        for k, v in s.items():
+            new_s[k.replace('module.', '')] = v
+        model.load_state_dict(new_s)
+        return model.eval()
 
     def load_avatar(self):
         full_imgs_path = f"{self.avatar_path}/full_imgs"
@@ -87,7 +84,7 @@ class Wav2LipWrapper(AvatarModelWrapper):
             audio_feature_batch = audio_feature_batch.unsqueeze(-1)
         audio_feature_batch = audio_feature_batch.permute(0, 3, 1, 2)
         face_img_batch = face_img_batch.permute(0, 3, 1, 2)
-        pred_img_batch = self.model(audio_feature_batch, face_img_batch)
+        pred_img_batch = self.backbone(audio_feature_batch, face_img_batch)
         pred_img_batch = pred_img_batch.cpu().numpy().transpose(0, 2, 3, 1) * 255.
         return pred_img_batch
 
