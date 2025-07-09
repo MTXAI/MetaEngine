@@ -66,9 +66,6 @@ class HumanContainer:
         self.fps = config.fps
         self.sample_rate = config.sample_rate
         self.timeout = config.timeout
-        self.warmup_iters = config.warmup_iters
-        self.window_left = config.warmup_iters // 2
-        self.window_right = config.warmup_iters // 2
         self.audio_ptime = config.audio_ptime
         self.video_ptime = config.video_ptime
         self.frame_multiple = config.frame_multiple
@@ -112,7 +109,7 @@ class HumanContainer:
         self.set_state(StateReady)
 
     def flush_track(self):
-        self.frame_index -= self.track_sync.flush()
+        self.frame_index = self.track_sync.flush()
 
     def flush(self):
         # 中断数字人当前对话
@@ -328,80 +325,75 @@ class HumanContainer:
             if self.get_state() == StatePause:
                 time.sleep(self.timeout)
                 continue
-            is_final = False
-            silence = True
-            audio_frame_batch = []
-            for i in range(self.batch_size*self.frame_multiple):
-                audio_frame_data = self._read_audio_frame()
-                audio_chunk = audio_frame_data.get("data")
-                audio_frame_batch.append(self._make_audio_frame(audio_chunk))
-                _is_final = audio_frame_data.get("is_final")
-                _state = audio_frame_data.get("state")
-                if not is_final:
-                    is_final = _is_final
-                if _state == 1:
-                    silence = False
-                chunk = audio_frame_data.get("data")
-                self.audio_chunk_batch.append(chunk)
-            if not silence:
-                try:
+            try:
+                is_final = False
+                silence = True
+                audio_frame_batch = []
+                for i in range(self.batch_size * self.frame_multiple):
+                    audio_frame_data = self._read_audio_frame()
+                    audio_chunk = audio_frame_data.get("data")
+                    audio_frame_batch.append(self._make_audio_frame(audio_chunk))
+                    _is_final = audio_frame_data.get("is_final")
+                    _state = audio_frame_data.get("state")
+                    if not is_final:
+                        is_final = _is_final
+                    if _state == 1:
+                        silence = False
+                    chunk = audio_frame_data.get("data")
+                    self.audio_chunk_batch.append(chunk)
+                if not silence:
                     audio_feature_batch = self.avatar_model.encode_audio_feature(self.audio_chunk_batch, self.config)
-                except Exception as e:
-                    logging.info(f"Encode audio feature error: {e}")
-                    traceback.print_exc()
-                    # 遇到错误, 状态重置为 ready
-                    self.set_state(StateReady)
-                    continue
-            else:
-                audio_feature_batch = None
-            self.audio_chunk_batch = self.audio_chunk_batch[self.batch_size*self.frame_multiple:]
-            if silence:
-                for i in range(self.batch_size):
-                    frame_index = self._mirror_frame_index(self.frame_index)
-                    video_frame = self.frame_list_cycle[frame_index]
-                    video_frame = self._make_video_frame(video_frame)
-                    asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
-                    audio_frames = audio_frame_batch[i*self.frame_multiple:i*self.frame_multiple+self.frame_multiple]
-                    for audio_frame in audio_frames:
-                        asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
-                    self._update_frame_index(1)
-            else:
-                # 当前状态为 busy, 切换为 speaking
-                if self.swap_state(StateBusy, StateSpeaking):
-                    self.flush_track()
-                face_img_batch = []
-                for i in range(self.batch_size):
-                    frame_index = self._mirror_frame_index(self.frame_index + i)
-                    face_img = self.face_list_cycle[frame_index]
-                    face_img_batch.append(face_img)
+                else:
+                    audio_feature_batch = None
+                self.audio_chunk_batch = self.audio_chunk_batch[self.batch_size * self.frame_multiple:]
+                if silence:
+                    for i in range(self.batch_size):
+                        frame_index = self._mirror_frame_index(self.frame_index)
+                        video_frame = self.frame_list_cycle[frame_index]
+                        video_frame = self._make_video_frame(video_frame)
+                        asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
+                        audio_frames = audio_frame_batch[
+                                       i * self.frame_multiple:i * self.frame_multiple + self.frame_multiple]
+                        for audio_frame in audio_frames:
+                            asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
+                        self._update_frame_index(1)
+                else:
+                    # 当前状态为 busy, 切换为 speaking
+                    if self.swap_state(StateBusy, StateSpeaking):
+                        self.flush_track()
+                    face_img_batch = []
+                    for i in range(self.batch_size):
+                        frame_index = self._mirror_frame_index(self.frame_index + i)
+                        face_img = self.face_list_cycle[frame_index]
+                        face_img_batch.append(face_img)
 
-                face_img_batch = np.asarray(face_img_batch)
-                audio_feature_batch = np.asarray(audio_feature_batch)
-                face_img_batch = torch.FloatTensor(face_img_batch).to(DEFAULT_RUNTIME_CONFIG.device)
-                audio_feature_batch = torch.FloatTensor(audio_feature_batch).to(DEFAULT_RUNTIME_CONFIG.device)
+                    face_img_batch = np.asarray(face_img_batch)
+                    audio_feature_batch = np.asarray(audio_feature_batch)
+                    face_img_batch = torch.FloatTensor(face_img_batch).to(DEFAULT_RUNTIME_CONFIG.device)
+                    audio_feature_batch = torch.FloatTensor(audio_feature_batch).to(DEFAULT_RUNTIME_CONFIG.device)
 
-                try:
                     with torch.no_grad():
                         pred_img_batch = self.avatar_model.inference(audio_feature_batch, face_img_batch, self.config)
-                except Exception as e:
-                    logging.info(f"Inference error: {e}")
-                    traceback.print_exc()
-                    # 遇到错误, 状态重置为 ready
-                    self.set_state(StateReady)
-                    continue
 
-                for i, pred in enumerate(pred_img_batch):
-                    frame_index = self._mirror_frame_index(self.frame_index)
-                    video_frame = self._render_frame(pred, frame_index)
-                    asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
-                    audio_frames = audio_frame_batch[i*self.frame_multiple:i*self.frame_multiple+self.frame_multiple]
-                    for audio_frame in audio_frames:
-                        asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
-                    self._update_frame_index(1)
+                    for i, pred in enumerate(pred_img_batch):
+                        frame_index = self._mirror_frame_index(self.frame_index)
+                        video_frame = self._render_frame(pred, frame_index)
+                        asyncio.run_coroutine_threadsafe(self.track_sync.put_video_frame(video_frame), self.loop)
+                        audio_frames = audio_frame_batch[
+                                       i * self.frame_multiple:i * self.frame_multiple + self.frame_multiple]
+                        for audio_frame in audio_frames:
+                            asyncio.run_coroutine_threadsafe(self.track_sync.put_audio_frame(audio_frame), self.loop)
+                        self._update_frame_index(1)
 
-            if is_final:
-                # 当前状态为 speaking, 最后一个帧, 状态切换回 ready
-                self.swap_state(StateSpeaking, StateReady)
+                if is_final:
+                    # 当前状态为 speaking, 最后一个帧, 状态切换回 ready
+                    self.swap_state(StateSpeaking, StateReady)
+            except Exception as e:
+                logging.info(f"Process audio data error: {e}")
+                traceback.print_exc()
+                self.set_state(StateReady)
+                time.sleep(self.timeout)
+                continue
 
     def shutdown(self):
         self.stop_event.set()

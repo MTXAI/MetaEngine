@@ -22,17 +22,12 @@ class EdgeTTSWrapper(TTSModelWrapper):
         self.sample_rate = sample_rate
 
     def _communicating(self, text):
-        try:
-            communicate = edge_tts.Communicate(text, self.voice_type)
-            for chunk in communicate.stream_sync():
-                if chunk["type"] == "audio":
-                    self.buffer.write(chunk["data"])
-                elif chunk["type"] == "WordBoundary":
-                    pass
-        except Exception as e:
-            logging.info(f"Failed to communicate: {e}")
-            traceback.print_exc()
-            return
+        communicate = edge_tts.Communicate(text, self.voice_type)
+        for chunk in communicate.stream_sync():
+            if chunk["type"] == "audio":
+                self.buffer.write(chunk["data"])
+            elif chunk["type"] == "WordBoundary":
+                pass
 
     def reset(self, fn: Callable):
         self.inited = True

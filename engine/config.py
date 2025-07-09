@@ -85,7 +85,6 @@ class PlayerConfig(EasyConfig):
     sample_rate: int
     batch_size: int
     timeout: float
-    warmup_iters: int
     audio_ptime: float
     video_ptime: float
     frame_multiple: int
@@ -101,7 +100,6 @@ WAV2LIP_PLAYER_CONFIG = PlayerConfig(
         sample_rate=16000,
         batch_size=16,
         timeout=1/fps/2,
-        warmup_iters=20,
         audio_ptime=1/fps,
         video_ptime=1/fps*frame_multiple,
         frame_multiple=frame_multiple,

@@ -8,7 +8,7 @@ import numpy as np
 from dashscope.audio.tts_v2 import *
 
 from engine.human.voice.voice import TTSModelWrapper
-from engine.utils.sound import resample_sound
+from engine.utils.sound import resample_sound_raw
 
 
 class AliTTSCallback(ResultCallback):
@@ -82,7 +82,7 @@ class AliTTSWrapper(TTSModelWrapper):
 
     def _on_data(self, data: bytes):
         try:
-            speech = resample_sound(data, self.sample_rate)
+            speech = resample_sound_raw(data, self.sample_rate)
             return speech
         except Exception as e:
             logging.info(f"Failed to resample audio, error: {e}")
@@ -126,27 +126,12 @@ class AliTTSWrapper(TTSModelWrapper):
 
     def streaming_inference(self, text: str):
         assert self.inited
-        try:
-            self.streaming_synthesizer.streaming_call(text)
-        except TimeoutError:
-            logging.info(f"Timeout error")
-            return None
-        except Exception as e:
-            logging.info(f"Failed to stream inference: {e}")
-            traceback.print_exc()
-            return None
+        self.streaming_synthesizer.streaming_call(text)
+
 
     def inference(self, text):
         assert self.inited
-        try:
-            buffer_data = self.synthesizer.call(text)
-            if buffer_data is None:
-                return None
-            return self._on_data(buffer_data)
-        except TimeoutError:
+        buffer_data = self.synthesizer.call(text)
+        if buffer_data is None:
             return None
-        except Exception as e:
-            logging.info(f"Failed to inference: {e}")
-            traceback.print_exc()
-            return None
-
+        return self._on_data(buffer_data)

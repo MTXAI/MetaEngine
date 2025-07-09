@@ -33,7 +33,7 @@ class AvatarModelWrapper(nn.Module):
     def encode_audio_feature(self, audio_data_batch: List[np.ndarray], config: PlayerConfig, **kwargs) -> List[np.ndarray]:
         """
         编码音频特征
-        :param audio_data_batch: 音频数据, length = batch_size * 2 + warmup_iters
+        :param audio_data_batch: 音频数据, length = batch_size * 2
         :param config:
         :return:
         """
