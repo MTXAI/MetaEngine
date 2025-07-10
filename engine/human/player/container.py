@@ -1,21 +1,20 @@
 import asyncio
-import copy
 import logging
 import queue
 import threading
 import time
 import traceback
+from typing import Union, List, Tuple
 
 import numpy as np
 import torch
-from av import AudioFrame, VideoFrame
 
-from engine.agent.agents.base_agent import BaseAgent
+from engine.human.character.agent.base_agent import BaseAgent
 from engine.config import PlayerConfig
-from engine.human.avatar.avatar import AvatarModelWrapper, Avatar, AvatarProcessor
+from engine.human.avatar import AvatarModelWrapper, Avatar, AvatarProcessor
 from engine.human.player.state import *
-from engine.human.player.track import AudioStreamTrack, VideoStreamTrack
-from engine.human.voice.voice import TTSModelWrapper, VoiceProcessor
+from engine.transport import Transport
+from engine.human.voice import TTSModelWrapper, VoiceProcessor
 from engine.utils.data import Data
 
 
@@ -31,6 +30,8 @@ class HumanContainer:
             voice_processor: VoiceProcessor,
             avatar_processor: AvatarProcessor,
             loop: asyncio.AbstractEventLoop,
+            main_transport: Transport,
+            other_transports: Union[Transport, List[Transport], Tuple[Transport]]=None,
     ):
         self.config = config
         self.agent = agent
@@ -39,6 +40,14 @@ class HumanContainer:
         self.voice_processor = voice_processor
         self.avatar_processor = avatar_processor
         self.loop = loop
+        self.main_transport = main_transport
+        if other_transports is not None:
+            if isinstance(other_transports, Transport):
+                self.other_transports = [other_transports]
+            else:
+                self.other_transports = list(other_transports)
+        else:
+            self.other_transports = []
 
         # from config
         self.fps = config.fps
@@ -49,14 +58,6 @@ class HumanContainer:
         self.frame_multiple = config.frame_multiple
         self.chunk_size = int(self.sample_rate / self.fps)
         self.batch_size = config.batch_size
-
-        # track
-        self.audio_track = AudioStreamTrack(
-            self.config,
-        )
-        self.video_track = VideoStreamTrack(
-            self.config,
-        )
 
         # avatar
         self.avatar: Avatar = avatar
@@ -267,19 +268,14 @@ class HumanContainer:
         )
         return data
 
-    def _make_audio_frame(self, chunk):
+    def _process_audio_frame(self, chunk):
         chunk = self.voice_processor.process(chunk)
         chunk = (chunk * 32767).astype(np.int16)  # to pcm
-        frame = AudioFrame(format='s16', layout='mono', samples=chunk.shape[0])
-        frame.planes[0].update(chunk.tobytes())
-        frame.sample_rate = self.sample_rate
-        return frame
+        return chunk
 
-    def _make_video_frame(self, image):
+    def _process_video_frame(self, image):
         image = self.avatar_processor.process(image)
-        image[0, :] &= 0xFE  # 确保第一行是偶数，避免某些视频问题
-        frame = VideoFrame.from_ndarray(image, format="bgr24")
-        return frame
+        return image
 
     def process_audio_data_worker(self):
         while not self.stop_event.is_set():
@@ -300,15 +296,14 @@ class HumanContainer:
                         silence = False
 
                     audio_chunk = audio_frame_data.get("data")
-                    audio_frame_batch.append(self._make_audio_frame(audio_chunk))
+                    audio_frame_batch.append(self._process_audio_frame(audio_chunk))
                     self.audio_chunk_batch.append(audio_chunk)
 
                 # process frames
                 if silence:
                     for i in range(self.batch_size):
                         frame = self.avatar.get_next_frame()
-                        video_frame = self._make_video_frame(frame)
-
+                        video_frame = self._process_video_frame(frame)
                         audio_frames = audio_frame_batch[
                                        i * self.frame_multiple:
                                        i * self.frame_multiple + self.frame_multiple]
@@ -323,7 +318,7 @@ class HumanContainer:
 
                     for i, pred in enumerate(pred_img_batch):
                         frame = self.avatar.render_frame(pred)
-                        video_frame = self._make_video_frame(frame)
+                        video_frame = self._process_video_frame(frame)
                         audio_frames = audio_frame_batch[
                                        i * self.frame_multiple:
                                        i * self.frame_multiple + self.frame_multiple]
@@ -333,9 +328,9 @@ class HumanContainer:
 
                 self.audio_chunk_batch = []
                 if is_final:
-                    # 当前状态为 speaking, 等待 track 消费完最后一个帧, 状态切换回 ready
+                    # 当前状态为 speaking, 等待 transport 消费完最后一个帧, 状态切换回 ready
                     frame_index = self.avatar.frame_index
-                    while self.video_track.frame_count < frame_index-self.fps:
+                    while not self.main_transport.is_ready(frame_index-self.fps):
                         time.sleep(self.timeout)
                     self.set_state(StateReady)
             except Exception as e:
@@ -345,19 +340,28 @@ class HumanContainer:
                 time.sleep(self.timeout)
                 continue
 
+    def _send_frames(self, transport, video_frame, audio_frames, main=False):
+        res = asyncio.run_coroutine_threadsafe(transport.put_video_frame(video_frame), self.loop)
+        if main:  # 适用于 webrtc, 避免由于 frame 生产速率过快时, track 为了对齐时间戳频繁 wait(不精确), 导致帧跳现象(频繁卡顿或是帧过快)
+            res.result()
+        for audio_frame in audio_frames:
+            res = asyncio.run_coroutine_threadsafe(transport.put_audio_frame(audio_frame), self.loop)
+            if main:
+                res.result()
+
     def process_frames_worker(self):
         while not self.stop_event.is_set():
+            if self.get_state() == StatePause:
+                time.sleep(self.timeout)
+                continue
             try:
                 video_frame, audio_frames = self.frame_queue.get(timeout=self.timeout)
             except queue.Empty:
                 continue
 
-            res = asyncio.run_coroutine_threadsafe(self.video_track.put_frame(video_frame), self.loop)
-            res.result()
-            for audio_frame in audio_frames:
-                res = asyncio.run_coroutine_threadsafe(self.audio_track.put_frame(audio_frame), self.loop)
-                res.result()
-
+            self._send_frames(self.main_transport, video_frame, audio_frames, main=True)
+            for transport in self.other_transports:
+                self._send_frames(transport, video_frame, audio_frames, main=False)
 
     def shutdown(self):
         self.stop_event.set()

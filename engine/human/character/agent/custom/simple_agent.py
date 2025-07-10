@@ -2,7 +2,7 @@ from typing import Generator
 
 from langchain_openai import ChatOpenAI
 
-from engine.agent.agents.base_agent import BaseAgent
+from engine.human.character.agent.base_agent import BaseAgent
 
 
 class SimpleAgent(BaseAgent):

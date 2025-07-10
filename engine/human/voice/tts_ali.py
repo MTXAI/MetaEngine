@@ -1,10 +1,6 @@
-import io
-import logging
-import traceback
 from typing import Callable
 
 import dashscope
-import numpy as np
 from dashscope.audio.tts_v2 import *
 
 from engine.human.voice.voice import TTSModelWrapper

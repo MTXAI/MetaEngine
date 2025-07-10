@@ -1,6 +1,4 @@
 import io
-import logging
-import traceback
 from typing import Callable
 
 import edge_tts

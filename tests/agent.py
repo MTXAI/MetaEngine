@@ -1,18 +1,15 @@
-
-import __init__
-
 import argparse
 import logging
 
 from langchain_openai import ChatOpenAI
 from smolagents import OpenAIServerModel, FinalAnswerStep
 
-from engine.agent.agents.custom import SimpleAgent
-from engine.agent.agents.custom.knowledge_agent import KnowledgeAgent
-from engine.agent.agents.smol.agents import QaAgent
-from engine.agent.model.history import History
-from engine.agent.tools.rag import RetrieverTool
-from engine.agent.vecdb.chroma import clean_db, create_db
+from engine.human.character.agent.custom import SimpleAgent
+from engine.human.character.agent.custom.knowledge_agent import KnowledgeAgent
+from engine.human.character.agent.smol.agents import QaAgent
+from engine.human.character.model import History
+from engine.human.character.tools import RetrieverTool
+from engine.human.character.vecdb.chroma import clean_db, create_db
 from engine.config import *
 
 

@@ -1,17 +1,13 @@
 import asyncio
-import logging
-import time
+from typing import Union, List, Tuple
 
-from langchain_openai import ChatOpenAI
-
-from engine.agent.agents.base_agent import BaseAgent
+from engine.human.character.agent.base_agent import BaseAgent
 from engine.config import PlayerConfig
-from engine.human.avatar import AvatarModelWrapper
-from engine.human.avatar.avatar import AvatarProcessor, Avatar
+from engine.human.avatar import AvatarModelWrapper, AvatarProcessor, Avatar
 from engine.human.player.container import HumanContainer
 from engine.human.player.state import *
-from engine.human.voice import TTSModelWrapper
-from engine.human.voice.voice import VoiceProcessor
+from engine.transport import Transport
+from engine.human.voice import TTSModelWrapper, VoiceProcessor
 from engine.runtime import thread_pool
 from engine.utils.concurrent.pool import TaskInfo
 from engine.utils import Data
@@ -28,6 +24,8 @@ class HumanPlayer:
             voice_processor: VoiceProcessor,
             avatar_processor: AvatarProcessor,
             loop: asyncio.AbstractEventLoop,
+            main_transport: Transport,
+            other_transports: Union[Transport, List[Transport], Tuple[Transport]]=None,
     ):
         self.config = config
         self.container = HumanContainer(
@@ -39,6 +37,8 @@ class HumanPlayer:
             voice_processor,
             avatar_processor,
             loop,
+            main_transport,
+            other_transports,
         )
         self._start = False
 
@@ -47,12 +47,6 @@ class HumanPlayer:
 
     def is_busy(self):
         return self.container.get_state() == StateBusy or self.container.get_state() == StatePause
-
-    def get_audio_track(self):
-        return self.container.audio_track
-
-    def get_video_track(self):
-        return self.container.video_track
 
     def set_agent(self, agent: BaseAgent) -> bool:
         # agent 正在使用中
@@ -103,16 +97,20 @@ class HumanPlayer:
 
 
 if __name__ == '__main__':
+    import logging
+    import asyncio
+    import time
 
-    from engine.config import WAV2LIP_PLAYER_CONFIG
+    from langchain_openai import ChatOpenAI
     from engine.utils.data import Data
     from engine.config import ONE_API_LLM_MODEL
     from engine.human.voice.tts_ali import AliTTSWrapper
-    from engine.human.voice.tts_edge import EdgeTTSWrapper
-    from engine.agent.agents.custom import SimpleAgent
+    from engine.human.character.agent.custom import SimpleAgent
     from engine.utils import get_file_path
-    from engine.human.avatar import wav2lip
-    from engine.config import DEFAULT_VOICE_PROCESSOR_CONFIG, DEFAULT_AVATAR_PROCESSOR_CONFIG
+    from engine.config import DEFAULT_VOICE_PROCESSOR_CONFIG, DEFAULT_AVATAR_PROCESSOR_CONFIG, WAV2LIP_PLAYER_CONFIG
+    from engine.transport import Transport, TransportWebRTC
+    from engine.human.avatar import wav2lip, AvatarProcessor, Wav2LipWrapper
+    from engine.human.voice import VoiceProcessor, AliTTSWrapper, EdgeTTSWrapper
 
     a_f = '../../../avatars/wav2lip256_avatar1'
     a_p = get_file_path(a_f)
@@ -154,6 +152,8 @@ if __name__ == '__main__':
     voice_processor = VoiceProcessor(DEFAULT_VOICE_PROCESSOR_CONFIG)
     avatar_processor = AvatarProcessor(DEFAULT_AVATAR_PROCESSOR_CONFIG)
 
+    webrtc_transport = TransportWebRTC(WAV2LIP_PLAYER_CONFIG)
+
     player = HumanPlayer(
         config=WAV2LIP_PLAYER_CONFIG,
         agent=agent,
@@ -163,6 +163,8 @@ if __name__ == '__main__':
         voice_processor=voice_processor,
         avatar_processor=avatar_processor,
         loop=loop,
+        main_transport=webrtc_transport,
+        other_transports=None,
     )
 
     player.start()
@@ -173,11 +175,11 @@ if __name__ == '__main__':
         t = time.perf_counter()
         while True:
             await asyncio.sleep(0.01)
-            frame = await player.get_audio_track().recv()
+            frame = await webrtc_transport.audio_track.recv()
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                logging.info(f"{i}, {i / counttime}: {frame}, {player.get_audio_track().queue.qsize()}")
+                logging.info(f"{i}, {i / counttime}: {frame}, {webrtc_transport.audio_track.queue.qsize()}")
                 i = 0
                 counttime = 0
 
@@ -187,17 +189,16 @@ if __name__ == '__main__':
         while True:
             t = time.perf_counter()
             await asyncio.sleep(0.01)
-            frame = await player.get_video_track().recv()
+            frame = await webrtc_transport.video_track.recv()
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                logging.info(f"{i}, {i / counttime}: {frame}, {player.get_video_track().queue.qsize()}")
+                logging.info(f"{i}, {i / counttime}: {frame}, {webrtc_transport.video_track.queue.qsize()}")
                 i = 0
                 counttime = 0
 
     async def put_text_data():
         for i in range(1):
-            player.flush()
             res_data = player.put_text_data(Data(
                 data="介绍故宫",
                 is_chat=True,

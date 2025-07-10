@@ -3,12 +3,14 @@ import fractions
 import time
 from typing import Union
 
+import numpy as np
 from aiortc import MediaStreamTrack
 from av import AudioFrame, VideoFrame
 from av.frame import Frame
 from av.packet import Packet
 
 from engine.config import PlayerConfig
+from engine.transport import Transport
 
 
 class AudioStreamTrack(MediaStreamTrack):
@@ -105,3 +107,33 @@ class VideoStreamTrack(MediaStreamTrack):
 
     def stop(self):
         super().stop()
+
+class TransportWebRTC(Transport):
+    kind: str = "webrtc"
+    def __init__(self, config: PlayerConfig):
+        super().__init__()
+        self.audio_track = AudioStreamTrack(config)
+        self.video_track = VideoStreamTrack(config)
+        self.sample_rate = config.sample_rate
+        self.clock_rate = config.clock_rate
+
+    async def put_audio_frame(self, frame: np.ndarray):
+        new_frame = AudioFrame(format='s16', layout='mono', samples=frame.shape[0])
+        new_frame.planes[0].update(frame.tobytes())
+        new_frame.sample_rate = self.sample_rate
+        await self.audio_track.put_frame(new_frame)
+
+    async def put_video_frame(self, frame: np.ndarray):
+        frame[0, :] &= 0xFE  # 确保第一行是偶数，避免某些视频问题
+        new_frame = VideoFrame.from_ndarray(frame, format="bgr24")
+        await self.video_track.put_frame(new_frame)
+
+    def is_ready(self, frame_index) -> bool:
+        return self.video_track.frame_count >= frame_index
+
+    def start(self):
+        pass
+
+    def stop(self):
+        self.audio_track.stop()
+        self.video_track.stop()

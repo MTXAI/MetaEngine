@@ -1,13 +1,10 @@
-from typing import List, Tuple
+from typing import List
 
 import numpy as np
-import torch
-from torch import nn
 from transformers import WhisperModel, WhisperPreTrainedModel
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar import AvatarModelWrapper
-from engine.human.avatar.avatar import Avatar
 from models.musetalk.models.unet import UNet, PositionalEncoding
 from models.musetalk.models.vae import VAE
 from models.musetalk.utils.audio_processor import AudioProcessor

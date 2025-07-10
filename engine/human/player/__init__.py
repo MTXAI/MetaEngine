@@ -1,1 +1,1 @@
-from .player import HumanPlayer
+from .player import *
