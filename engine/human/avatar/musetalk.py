@@ -7,6 +7,7 @@ from transformers import WhisperModel, WhisperPreTrainedModel
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar import AvatarModelWrapper
+from engine.human.avatar.avatar import Avatar
 from models.musetalk.models.unet import UNet, PositionalEncoding
 from models.musetalk.models.vae import VAE
 from models.musetalk.utils.audio_processor import AudioProcessor
@@ -18,22 +19,19 @@ class MuseTalkWrapper(AvatarModelWrapper):
             unet_dir,
             vae_dir,
             whisper_dir,
-            avatar_path,
+            avatar,
     ):
         super().__init__()
         self.unet_dir = unet_dir
         self.vae_dir = vae_dir
         self.whisper_dir = whisper_dir
-        self.avatar_path = avatar_path
         self.unet = None
         self.vae = None
         self.pe = None
         self.whisper = None
         self.audio_processor = None
+        self.avatar = avatar
         self.load_backbone()
-
-    def gen_avatar(self):
-        pass
 
     def load_backbone(self):
         self.vae = VAE(
@@ -56,9 +54,6 @@ class MuseTalkWrapper(AvatarModelWrapper):
         whisper.requires_grad_(False)
         self.whisper = whisper
         self.audio_processor = AudioProcessor(feature_extractor_path=self.whisper_dir)
-
-    def load_avatar(self) -> Tuple[List, List, List]:
-        pass
 
     def inference(
             self,

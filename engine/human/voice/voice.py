@@ -3,6 +3,24 @@ from typing import Callable
 import numpy as np
 from torch import nn
 
+from engine.config import VoiceProcessorConfig
+
+
+class VoiceProcessor:
+    """
+    todo 对于每一帧, 做各种后处理
+    """
+    def __init__(self, config: VoiceProcessorConfig):
+        self.config = config
+
+    def process(
+            self,
+            frame: np.ndarray,
+            *args,
+            **kwargs,
+    ) -> np.ndarray:
+        return frame
+
 
 class TTSModelWrapper(nn.Module):
     inited: bool = False

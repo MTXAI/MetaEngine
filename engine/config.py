@@ -113,3 +113,20 @@ WAV2LIP_PLAYER_CONFIG = PlayerConfig(
     )
 )
 
+class VoiceProcessorConfig(EasyConfig):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+DEFAULT_VOICE_PROCESSOR_CONFIG = VoiceProcessorConfig(
+    dict()
+)
+
+class AvatarProcessorConfig(EasyConfig):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+DEFAULT_AVATAR_PROCESSOR_CONFIG = AvatarProcessorConfig(
+    dict()
+)

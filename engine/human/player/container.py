@@ -12,10 +12,10 @@ from av import AudioFrame, VideoFrame
 
 from engine.agent.agents.base_agent import BaseAgent
 from engine.config import PlayerConfig
-from engine.human.avatar.avatar import AvatarModelWrapper, Avatar
+from engine.human.avatar.avatar import AvatarModelWrapper, Avatar, AvatarProcessor
 from engine.human.player.state import *
 from engine.human.player.track import AudioStreamTrack, VideoStreamTrack
-from engine.human.voice.voice import TTSModelWrapper
+from engine.human.voice.voice import TTSModelWrapper, VoiceProcessor
 from engine.utils.data import Data
 
 
@@ -26,13 +26,18 @@ class HumanContainer:
             config: PlayerConfig,
             agent: BaseAgent,
             tts_model: TTSModelWrapper,
+            avatar: Avatar,
             avatar_model: AvatarModelWrapper,
+            voice_processor: VoiceProcessor,
+            avatar_processor: AvatarProcessor,
             loop: asyncio.AbstractEventLoop,
     ):
         self.config = config
         self.agent = agent
         self.tts_model = tts_model
         self.avatar_model = avatar_model
+        self.voice_processor = voice_processor
+        self.avatar_processor = avatar_processor
         self.loop = loop
 
         # from config
@@ -54,10 +59,10 @@ class HumanContainer:
         )
 
         # avatar
-        self.avatar: Avatar = None
+        self.avatar: Avatar = avatar
 
         # runtime control
-        self.state =  HumanState(StateNotReady)
+        self.state =  HumanState(StateReady)
         self.stop_event = threading.Event()
 
         # data flow
@@ -69,10 +74,6 @@ class HumanContainer:
         self.audio_data_fragment = None
         self.audio_data_count = 0
         self.audio_chunk_batch = []
-
-    def load(self):
-        self.avatar = self.avatar_model.load_avatar()
-        self.set_state(StateReady)
 
     def swap_state(self, old_state: int, new_state: int):
         res = self.state.swap_state(old_state, new_state)
@@ -94,6 +95,8 @@ class HumanContainer:
             self.audio_queue.queue.clear()
             self.audio_data_fragment = None
             self.frame_queue.queue.clear()
+        else:
+            logging.info(f"pause failed, human state is {state_str[self.get_state()]}")
 
     def put_text_data(self, data: Data):
         if self.get_state() != StateReady:
@@ -101,7 +104,6 @@ class HumanContainer:
                 ok=False,
                 msg=f"human state not ready {state_str[self.get_state()]}",
             )
-        self.set_state(StateBusy)
 
         # 文字预处理操作
         text = data.get("data")
@@ -111,6 +113,8 @@ class HumanContainer:
                 ok=False,
                 msg="fuck data",
             )
+
+        self.set_state(StateBusy)
 
         self.text_queue.put(data)
         return Data(
@@ -264,13 +268,15 @@ class HumanContainer:
         return data
 
     def _make_audio_frame(self, chunk):
-        chunk = (chunk * 32767).astype(np.int16)
+        chunk = self.voice_processor.process(chunk)
+        chunk = (chunk * 32767).astype(np.int16)  # to pcm
         frame = AudioFrame(format='s16', layout='mono', samples=chunk.shape[0])
         frame.planes[0].update(chunk.tobytes())
         frame.sample_rate = self.sample_rate
         return frame
 
     def _make_video_frame(self, image):
+        image = self.avatar_processor.process(image)
         image[0, :] &= 0xFE  # 确保第一行是偶数，避免某些视频问题
         frame = VideoFrame.from_ndarray(image, format="bgr24")
         return frame

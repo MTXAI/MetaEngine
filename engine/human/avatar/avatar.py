@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from engine.config import PlayerConfig
+from engine.config import PlayerConfig, AvatarProcessorConfig
 from engine.utils import EasyDict
 from engine.utils.data import Data
 
@@ -20,6 +20,9 @@ class Avatar(EasyDict):
 
         self.frame_index = 0
         self.frame_count = len(self.frame_cycle)
+
+    def reset(self):
+        self.frame_index = 0
 
     def mirror_frame_index(self, index):
         turn = index // self.frame_count
@@ -50,7 +53,6 @@ class Avatar(EasyDict):
         self.update_frame_index(1)
         return frame
 
-    # @override
     def render_frame(self, pred) -> np.ndarray:
         frame_index = self.mirror_frame_index(self.frame_index)
         frame = copy.deepcopy(self.get_frame(frame_index))
@@ -62,26 +64,27 @@ class Avatar(EasyDict):
         return frame
 
 
-class AvatarModelWrapper(nn.Module):
-    @classmethod
-    def gen_avatar(cls):
-        """
-        生成 avatar 资源
-        :return:
-        """
-        pass
+class AvatarProcessor:
+    """
+    todo 对于每一帧, 做各种后处理
+    """
+    def __init__(self, config: AvatarProcessorConfig):
+        self.config = config
 
+    def process(
+            self,
+            frame: np.ndarray,
+            *args,
+            **kwargs,
+    ) -> np.ndarray:
+        return frame
+
+
+class AvatarModelWrapper(nn.Module):
     def load_backbone(self) -> None:
         """
         加载 backbone 模型
         :return: backbone
-        """
-        pass
-
-    def load_avatar(self) -> Avatar:
-        """
-        加载 avatar 资源
-        :return:
         """
         pass
 

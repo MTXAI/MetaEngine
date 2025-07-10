@@ -23,18 +23,42 @@ def _read_imgs(img_list):
     return frames
 
 
+def gen_avatar() -> Avatar:
+    pass
+
+
+# todo 实现 register, 注册 load, gen 和 模型
+def load_avatar(avatar_path):
+    full_imgs_path = f"{avatar_path}/full_imgs"
+    face_imgs_path = f"{avatar_path}/face_imgs"
+    coords_path = f"{avatar_path}/coords.pkl"
+
+    with open(coords_path, 'rb') as f:
+        coord_list_cycle = pickle.load(f)
+    input_img_list = glob.glob(os.path.join(full_imgs_path, '*.[jpJP][pnPN]*[gG]'))
+    input_img_list = sorted(input_img_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
+    frame_list_cycle = _read_imgs(input_img_list)
+    # self.imagecache = ImgCache(len(self.coord_list_cycle),self.full_imgs_path,1000)
+    input_face_list = glob.glob(os.path.join(face_imgs_path, '*.[jpJP][pnPN]*[gG]'))
+    input_face_list = sorted(input_face_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
+    face_list_cycle = _read_imgs(input_face_list)
+
+    return Avatar(
+        dict(
+            frame_cycle=frame_list_cycle,
+            bbox_cycle=coord_list_cycle,
+            face_cycle=face_list_cycle,
+        )
+    )
+
+
 class Wav2LipWrapper(AvatarModelWrapper):
-    def __init__(self, ckpt_path, avatar_path):
+    def __init__(self, ckpt_path: str, avatar: Avatar):
         super().__init__()
         self.ckpt_path = ckpt_path
-        self.avatar_path = avatar_path
-        self.avatar: Avatar = None
+        self.avatar: Avatar = avatar
         self.backbone = None
         self.load_backbone()
-
-    @classmethod
-    def gen_avatar(cls):
-        pass
 
     def load_backbone(self):
         model = Wav2Lip()
@@ -48,30 +72,6 @@ class Wav2LipWrapper(AvatarModelWrapper):
             new_s[k.replace('module.', '')] = v
         model.load_state_dict(new_s)
         self.backbone = model.eval()
-
-    def load_avatar(self):
-        full_imgs_path = f"{self.avatar_path}/full_imgs"
-        face_imgs_path = f"{self.avatar_path}/face_imgs"
-        coords_path = f"{self.avatar_path}/coords.pkl"
-
-        with open(coords_path, 'rb') as f:
-            coord_list_cycle = pickle.load(f)
-        input_img_list = glob.glob(os.path.join(full_imgs_path, '*.[jpJP][pnPN]*[gG]'))
-        input_img_list = sorted(input_img_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
-        frame_list_cycle = _read_imgs(input_img_list)
-        # self.imagecache = ImgCache(len(self.coord_list_cycle),self.full_imgs_path,1000)
-        input_face_list = glob.glob(os.path.join(face_imgs_path, '*.[jpJP][pnPN]*[gG]'))
-        input_face_list = sorted(input_face_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
-        face_list_cycle = _read_imgs(input_face_list)
-
-        self.avatar = Avatar(
-            dict(
-                frame_cycle=frame_list_cycle,
-                bbox_cycle=coord_list_cycle,
-                face_cycle=face_list_cycle,
-            )
-        )
-        return self.avatar
 
     def _encode_audio_feature(self, frame_batch: List[np.array], config: PlayerConfig, **kwargs) -> List[np.ndarray]:
         # expect 5120

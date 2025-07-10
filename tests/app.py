@@ -8,10 +8,13 @@ from langchain_openai import ChatOpenAI
 
 from engine.agent.agents.custom import KnowledgeAgent
 from engine.agent.vecdb.chroma import try_load_db
-from engine.config import WAV2LIP_PLAYER_CONFIG, DEFAULT_PROJECT_CONFIG, ONE_API_LLM_MODEL
-from engine.human.avatar import Wav2LipWrapper
+from engine.config import WAV2LIP_PLAYER_CONFIG, DEFAULT_PROJECT_CONFIG, ONE_API_LLM_MODEL, \
+    DEFAULT_VOICE_PROCESSOR_CONFIG, DEFAULT_AVATAR_PROCESSOR_CONFIG
+from engine.human.avatar import wav2lip
+from engine.human.avatar.avatar import AvatarProcessor
 from engine.human.player import HumanPlayer
 from engine.human.voice import AliTTSWrapper, EdgeTTSWrapper
+from engine.human.voice.voice import VoiceProcessor
 from engine.utils import Data
 
 a_f = '../avatars/wav2lip256_avatar1'
@@ -32,7 +35,8 @@ tts_model_edge = EdgeTTSWrapper(
 tts_models = [tts_model_ali, tts_model_edge]
 tts_model_idx = 0
 
-avatar_model = Wav2LipWrapper(c_f, a_f)
+avatar = wav2lip.load_avatar(a_f)
+avatar_model = wav2lip.Wav2LipWrapper(c_f, avatar)
 
 # 创建Player实例并启动
 loop = asyncio.new_event_loop()
@@ -52,13 +56,17 @@ llm_model = ChatOpenAI(
 vector_store = try_load_db(DEFAULT_PROJECT_CONFIG.vecdb_path, DEFAULT_PROJECT_CONFIG.docs_path)
 agent = KnowledgeAgent(llm_model, vector_store)
 
+voice_processor = VoiceProcessor(DEFAULT_VOICE_PROCESSOR_CONFIG)
+avatar_processor = AvatarProcessor(DEFAULT_AVATAR_PROCESSOR_CONFIG)
+
 player = HumanPlayer(
     config=WAV2LIP_PLAYER_CONFIG,
-)
-player.init_container(
     agent=agent,
     tts_model=tts_models[tts_model_idx],
+    avatar=avatar,
     avatar_model=avatar_model,
+    voice_processor=voice_processor,
+    avatar_processor=avatar_processor,
     loop=loop,
 )
 
