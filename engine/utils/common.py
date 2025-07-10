@@ -68,3 +68,19 @@ def get_device_and_start_method() -> Tuple[str, str]:
 
     return device, start_method
 
+
+def check_fp16_support():
+    if not torch.cuda.is_available():
+        return False
+
+    device = torch.device("cuda")
+    major, minor = torch.cuda.get_device_capability(device)
+    if major >= 6:
+        try:
+            _ = torch.tensor([1.0], device="cuda", dtype=torch.float16)
+            return True
+        except:
+            return False
+    else:
+        return False
+

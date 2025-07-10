@@ -81,13 +81,8 @@ class AliTTSWrapper(TTSModelWrapper):
         )
 
     def _on_data(self, data: bytes):
-        try:
-            speech = resample_sound_raw(data, self.sample_rate)
-            return speech
-        except Exception as e:
-            logging.info(f"Failed to resample audio, error: {e}")
-            traceback.print_exc()
-            return None
+        speech = resample_sound_raw(data, self.sample_rate)
+        return speech
 
     def _on_data_callback(self, fn: Callable):
         def on_data(data: bytes):

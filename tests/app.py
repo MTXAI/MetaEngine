@@ -15,7 +15,7 @@ from engine.human.voice import AliTTSWrapper, EdgeTTSWrapper
 from engine.utils import Data
 
 a_f = '../avatars/wav2lip256_avatar1'
-c_f = '../checkpoints/wav2lip.pth'
+c_f = '../checkpoints/wav2lip/wav2lip.pth'
 
 tts_model_ali = AliTTSWrapper(
     model_str="cosyvoice-v1",
@@ -60,7 +60,6 @@ player.init_container(
     tts_model=tts_models[tts_model_idx],
     avatar_model=avatar_model,
     loop=loop,
-    lazy_load=True,
 )
 
 # 存储已连接的客户端
@@ -162,13 +161,16 @@ async def websocket_handler(request):
 
     return ws
 
+async def pause(request):
+    res_data = player.pause()
+    return web.json_response({"status": "success", "data": res_data})
+
 
 # echo 接口
 async def echo(request):
     data = await request.json()
     text = data.get('text')
     if text and not player.is_busy():
-        player.flush()
         res_data = player.put_text_data(
             Data(
                 data=text,
@@ -187,7 +189,6 @@ async def chat(request):
     data = await request.json()
     question = data.get('question')
     if question and not player.is_busy():
-        player.flush()
         res_data = player.put_text_data(
             Data(
                 data=question,
@@ -206,6 +207,7 @@ def main():
     app = web.Application()
     app.router.add_get("/", index)
     app.router.add_get("/ws", websocket_handler)
+    app.router.add_post("/pause", pause)
     app.router.add_post("/echo", echo)
     app.router.add_post("/chat", chat)
 
@@ -216,7 +218,6 @@ def main():
     site = web.TCPSite(runner, "0.0.0.0", 8080)
     loop.run_until_complete(site.start())
 
-    player.load_container()  # test lazy load
     player.start()
 
     logging.info("服务器已启动，访问 http://localhost:8080")

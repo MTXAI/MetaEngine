@@ -9,97 +9,50 @@ from av.frame import Frame
 from av.packet import Packet
 
 from engine.config import PlayerConfig
-from engine.utils.concurrent import ObservableQueue
-
-
-class StreamTrackSync:
-    def __init__(self, config: PlayerConfig):
-        self.fps = config.fps
-        self.prefer = config.frame_sync_prefer
-
-        self.audio_queue = ObservableQueue(self.fps*config.frame_multiple+self.fps, wait_count=config.frame_multiple)
-        self.video_queue = ObservableQueue(self.fps+self.fps, wait_count=1)
-
-        self.audio_ptime = config.audio_ptime
-        self.video_ptime = config.video_ptime
-        self.sample_rate = config.sample_rate
-        self.clock_rate = config.clock_rate
-        self.audio_timebase = fractions.Fraction(1, self.sample_rate)
-        self.video_timebase = fractions.Fraction(1, self.clock_rate)
-
-        self.audio_timestamp = 0
-        self.video_timestamp = 0
-        self.audio_frame_count = 0
-        self.video_frame_count = 0
-        self.start_time = 0.0
-
-        self.consumed_frame_count = 0
-
-
-    def flush(self):
-        self.audio_queue.clear()
-        self.video_queue.clear()
-        return self.consumed_frame_count
-
-    async def put_audio_frame(self, frame: AudioFrame):
-        if self.prefer == "video":
-            await self.video_queue.wait_for_data()
-        await self.audio_queue.put(frame)
-
-    async def put_video_frame(self, frame: VideoFrame):
-        if self.prefer == "audio":
-            await self.audio_queue.wait_for_data()
-        await self.video_queue.put(frame)
-
-    async def get_audio_frame(self) -> AudioFrame:
-        frame = await self.audio_queue.get()
-        return frame
-
-    async def get_video_frame(self) -> VideoFrame:
-        frame = await self.video_queue.get()
-        self.consumed_frame_count += 1
-        return frame
-
-    def _get_start_time(self):
-        # unsafe
-        if self.start_time == 0:
-            self.start_time = time.time()
-        return self.start_time
-
-    async def next_audio_timestamp(self):
-        self.audio_timestamp += int(self.sample_rate * self.audio_ptime)
-        self.audio_frame_count += 1
-        start_time = self._get_start_time()
-        wait = start_time + self.audio_frame_count * self.audio_ptime - time.time()
-        if wait > 0:
-            await asyncio.sleep(wait)
-        return self.audio_timestamp, self.audio_timebase
-
-    async def next_video_timestamp(self):
-        self.video_timestamp += int(self.clock_rate * self.video_ptime)
-        self.video_frame_count += 1
-        start_time = self._get_start_time()
-        wait = start_time + self.video_frame_count * self.video_ptime - time.time()
-        if wait > 0:
-            await asyncio.sleep(wait)
-        return self.video_timestamp, self.video_timebase
 
 
 class AudioStreamTrack(MediaStreamTrack):
     kind = "audio"
 
-    def __init__(self, config: PlayerConfig, track_sync: StreamTrackSync):
+    def __init__(self, config: PlayerConfig):
         super().__init__()
         self.config = config
-        self.track_sync = track_sync
 
+        self.queue = asyncio.Queue(config.fps)
+
+        self.rate = config.sample_rate
+        self.ptime = config.audio_ptime
+        self.timebase = fractions.Fraction(1, self.rate)
+
+        self.frame_count = 0
+        self._timestamp = 0
+        self._start_time = 0.0
+
+    async def put_frame(self, frame: AudioFrame):
+        await self.queue.put(frame)
+
+    async def get_frame(self) -> AudioFrame:
+        frame = await self.queue.get()
+        return frame
+
+    async def next_timestamp(self):
+        if self._start_time == 0:
+            self._start_time = time.time()
+            self._timestamp = 0
+            return self._timestamp
+        self._timestamp += int(self.rate * self.ptime)
+        self.frame_count += 1
+        wait = self._start_time + self.frame_count * self.ptime - time.time()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        return self._timestamp
 
     async def recv(self) -> Union[Frame, Packet]:
-        frame = await self.track_sync.get_audio_frame()
+        frame = await self.get_frame()
         frame: AudioFrame
-        pts, timebase = await self.track_sync.next_audio_timestamp()
+        pts = await self.next_timestamp()
         frame.pts = pts
-        frame.time_base = timebase
+        frame.time_base = self.timebase
         return frame
 
     def stop(self):
@@ -109,19 +62,46 @@ class AudioStreamTrack(MediaStreamTrack):
 class VideoStreamTrack(MediaStreamTrack):
     kind = "video"
 
-    def __init__(self, config: PlayerConfig, track_sync: StreamTrackSync):
+    def __init__(self, config: PlayerConfig):
         super().__init__()
         self.config = config
-        self.track_sync = track_sync
+
+        self.queue = asyncio.Queue(config.fps // config.frame_multiple)
+
+        self.rate = config.clock_rate
+        self.ptime = config.video_ptime
+        self.timebase = fractions.Fraction(1, self.rate)
+
+        self.frame_count = 0
+        self._timestamp = 0
+        self._start_time = 0.0
+
+    async def put_frame(self, frame: VideoFrame):
+        await self.queue.put(frame)
+
+    async def get_frame(self) -> VideoFrame:
+        frame = await self.queue.get()
+        return frame
+
+    async def next_timestamp(self):
+        if self._start_time == 0:
+            self._start_time = time.time()
+            self._timestamp = 0
+            return self._timestamp
+        self._timestamp += int(self.rate * self.ptime)
+        self.frame_count += 1
+        wait = self._start_time + self.frame_count * self.ptime - time.time()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        return self._timestamp
 
     async def recv(self) -> Union[Frame, Packet]:
-        frame = await self.track_sync.get_video_frame()
+        frame = await self.get_frame()
         frame: VideoFrame
-        pts, timebase = await self.track_sync.next_video_timestamp()
+        pts = await self.next_timestamp()
         frame.pts = pts
-        frame.time_base = timebase
+        frame.time_base = self.timebase
         return frame
 
     def stop(self):
         super().stop()
-

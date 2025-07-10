@@ -9,7 +9,7 @@ import torch
 from tqdm import tqdm
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG, frame_multiple
-from engine.human.avatar.avatar import AvatarModelWrapper
+from engine.human.avatar.avatar import AvatarModelWrapper, Avatar
 from models.wav2lip import Wav2Lip
 from models.wav2lip.audio import melspectrogram
 from models.wav2lip.hparams import hparams
@@ -28,17 +28,26 @@ class Wav2LipWrapper(AvatarModelWrapper):
         super().__init__()
         self.ckpt_path = ckpt_path
         self.avatar_path = avatar_path
-        self.backbone = self.load_backbone()
+        self.avatar: Avatar = None
+        self.backbone = None
+        self.load_backbone()
+
+    @classmethod
+    def gen_avatar(cls):
+        pass
 
     def load_backbone(self):
-        model = Wav2Lip().to(DEFAULT_RUNTIME_CONFIG.device)
+        model = Wav2Lip()
+        if DEFAULT_RUNTIME_CONFIG.use_fp16:
+            model = model.half()
+        model = model.to(DEFAULT_RUNTIME_CONFIG.device)
         checkpoint = torch.load(self.ckpt_path, map_location=lambda storage, loc: storage)
         s = checkpoint["state_dict"]
         new_s = {}
         for k, v in s.items():
             new_s[k.replace('module.', '')] = v
         model.load_state_dict(new_s)
-        return model.eval()
+        self.backbone = model.eval()
 
     def load_avatar(self):
         full_imgs_path = f"{self.avatar_path}/full_imgs"
@@ -55,9 +64,16 @@ class Wav2LipWrapper(AvatarModelWrapper):
         input_face_list = sorted(input_face_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
         face_list_cycle = _read_imgs(input_face_list)
 
-        return frame_list_cycle, face_list_cycle, coord_list_cycle
+        self.avatar = Avatar(
+            dict(
+                frame_cycle=frame_list_cycle,
+                bbox_cycle=coord_list_cycle,
+                face_cycle=face_list_cycle,
+            )
+        )
+        return self.avatar
 
-    def encode_audio_feature(self, frame_batch: List[np.array], config: PlayerConfig, **kwargs) -> List[np.ndarray]:
+    def _encode_audio_feature(self, frame_batch: List[np.array], config: PlayerConfig, **kwargs) -> List[np.ndarray]:
         # expect 5120
         frames = np.concatenate(frame_batch)
         mel = melspectrogram(frames)
@@ -76,7 +92,24 @@ class Wav2LipWrapper(AvatarModelWrapper):
             i += 1
         return audio_feature_batch
 
-    def inference(self, audio_feature_batch: torch.Tensor, face_img_batch: torch.Tensor, config: PlayerConfig):
+    def inference(
+        self,
+        audio_chunk_batch: List[np.ndarray],
+        config: PlayerConfig,
+        **kwargs
+    ) -> np.ndarray:
+        audio_feature_batch = self._encode_audio_feature(audio_chunk_batch, config)
+        audio_feature_batch = np.asarray(audio_feature_batch)
+        audio_feature_batch = torch.FloatTensor(audio_feature_batch).to(DEFAULT_RUNTIME_CONFIG.device)
+
+        face_img_batch = []
+        for i in range(config.batch_size):
+            frame_index = self.avatar.mirror_frame_index(self.avatar.frame_index + i)
+            face_img = self.avatar.get_any_data(frame_index, data_type="face_cycle")
+            face_img_batch.append(face_img)
+        face_img_batch = np.asarray(face_img_batch)
+        face_img_batch = torch.FloatTensor(face_img_batch).to(DEFAULT_RUNTIME_CONFIG.device)
+
         # expect torch.Size([16, 80, 16]) torch.Size([16, 256, 256, 3])
         face_img_masked = face_img_batch.clone()
         face_img_masked[:, face_img_batch[0].shape[0] // 2:] = 0

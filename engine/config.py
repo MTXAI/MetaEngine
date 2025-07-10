@@ -1,7 +1,7 @@
 import os.path
 from pathlib import Path
 
-from engine.utils.common import get_device_and_start_method
+from engine.utils.common import get_device_and_start_method, check_fp16_support
 from engine.utils.config import EasyConfig
 
 
@@ -61,7 +61,7 @@ ONE_API_LLM_MODEL = LLMModelConfig(
     )
 )
 
-_device, start_method = get_device_and_start_method()
+
 class RuntimeConfig(EasyConfig):
     device: str
     start_method: str
@@ -69,8 +69,12 @@ class RuntimeConfig(EasyConfig):
     max_queue_size: int
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        _device, start_method = get_device_and_start_method()
         self.device = _device
         self.start_method = start_method
+
+        _use_fp16 = check_fp16_support()
+        self.use_fp16 = _use_fp16
 
 DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
     dict(
@@ -93,8 +97,8 @@ class PlayerConfig(EasyConfig):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-fps = 60.
-frame_multiple = 3
+fps = 50.
+frame_multiple = 2
 WAV2LIP_PLAYER_CONFIG = PlayerConfig(
     dict(
         fps=int(fps),
@@ -105,7 +109,7 @@ WAV2LIP_PLAYER_CONFIG = PlayerConfig(
         video_ptime=1/fps*frame_multiple,
         frame_multiple=frame_multiple,
         clock_rate=90000,
-        frame_sync_prefer="audio",
+        frame_sync_prefer="video",
     )
 )
 

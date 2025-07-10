@@ -9,7 +9,6 @@ from engine.config import PlayerConfig
 from engine.human.avatar import AvatarModelWrapper
 from engine.human.player.container import HumanContainer
 from engine.human.player.state import *
-from engine.human.player.track import AudioStreamTrack, VideoStreamTrack, StreamTrackSync
 from engine.human.voice import TTSModelWrapper
 from engine.runtime import thread_pool
 from engine.utils.concurrent.pool import TaskInfo
@@ -31,7 +30,6 @@ class HumanPlayer:
             tts_model: TTSModelWrapper,
             avatar_model: AvatarModelWrapper,
             loop: asyncio.AbstractEventLoop,
-            lazy_load: bool = False
     ):
         if self.container is not None:
             self.shutdown()
@@ -42,21 +40,12 @@ class HumanPlayer:
             avatar_model,
             loop,
         )
-        if not lazy_load:
-            self.load_container()
-
-    def load_container(self):
-        assert self.container is not None
-        self.container.load()
 
     def is_ready(self):
         return self.container.get_state() == StateReady
 
     def is_busy(self):
         return self.container.get_state() == StateBusy or self.container.get_state() == StatePause
-
-    def get_track_sync(self):
-        return self.container.track_sync
 
     def get_audio_track(self):
         return self.container.audio_track
@@ -78,8 +67,8 @@ class HumanPlayer:
         self.container.tts_model = tts_model
         return True
 
-    def flush(self):
-        self.container.flush()
+    def pause(self):
+        self.container.pause()
 
     def put_text_data(self, data: Data):
         return self.container.put_text_data(data)
@@ -87,7 +76,8 @@ class HumanPlayer:
     def start(self):
         if self._start:
             return
-        assert self.is_ready()
+        assert self.container is not None
+        self.container.load()
         thread_pool.submit(
             self.container.process_text_data_worker,
             task_info=TaskInfo(
@@ -98,6 +88,12 @@ class HumanPlayer:
             self.container.process_audio_data_worker,
             task_info=TaskInfo(
                 name=f"container.process_audio_data_worker"
+            )
+        )
+        thread_pool.submit(
+            self.container.process_frames_worker,
+            task_info=TaskInfo(
+                name=f"container.process_frames_worker"
             )
         )
         self._start = True
@@ -116,10 +112,12 @@ if __name__ == '__main__':
     from engine.human.voice.tts_ali import AliTTSWrapper
     from engine.human.voice.tts_edge import EdgeTTSWrapper
     from engine.agent.agents.custom import SimpleAgent
+    from engine.utils import get_file_path
 
     a_f = '../../../avatars/wav2lip256_avatar1'
-    s_f = '../../../tests/test_datas/asr.wav'
-    c_f = '../../../checkpoints/wav2lip.pth'
+    a_p = get_file_path(a_f)
+    c_f = '../../../checkpoints/wav2lip/wav2lip.pth'
+    c_p = get_file_path(c_f)
 
     # 创建Player实例并启动
     loop = asyncio.new_event_loop()
@@ -134,7 +132,7 @@ if __name__ == '__main__':
     #     voice_type="zh-CN-YunxiaNeural",
     #     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
     # )
-    avatar_model = Wav2LipWrapper(c_f, a_f)
+    avatar_model = Wav2LipWrapper(c_p.absolute().as_posix(), a_p.absolute().as_posix())
 
     # llm_model = ChatOpenAI(
     #     model=QWEN_LLM_MODEL.model_id,
@@ -159,7 +157,6 @@ if __name__ == '__main__':
         tts_model=tts_model,
         avatar_model=avatar_model,
         loop=loop,
-        lazy_load=False,
     )
 
     player.start()
@@ -174,7 +171,7 @@ if __name__ == '__main__':
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                logging.info(f"{i}, {i / counttime}: {frame}, {player.get_track_sync().audio_queue.qsize()}")
+                logging.info(f"{i}, {i / counttime}: {frame}, {player.get_audio_track().queue.qsize()}")
                 i = 0
                 counttime = 0
 
@@ -188,7 +185,7 @@ if __name__ == '__main__':
             counttime += (time.perf_counter() - t)
             i += 1
             if i >= 100:
-                logging.info(f"{i}, {i / counttime}: {frame}, {player.get_track_sync().video_queue.qsize()}")
+                logging.info(f"{i}, {i / counttime}: {frame}, {player.get_video_track().queue.qsize()}")
                 i = 0
                 counttime = 0
 

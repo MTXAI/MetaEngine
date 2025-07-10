@@ -149,7 +149,8 @@
       <!-- 输入框和按钮 -->
       <div class="mb-6">
         <input type="text" id="inputText" class="bg-gray-800 border border-gray-700 rounded-lg p-2 w-full mb-2" placeholder="输入要复述的文字或问题">
-        <button id="echoBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg mr-2">复述</button>
+        <button id="pauseBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg mr-2">中止</button>
+        <button id="echoBtn" class="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg mr-2">复述</button>
         <button id="chatBtn" class="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg">对话</button>
       </div>
 
@@ -195,6 +196,7 @@
     const videoControls = document.getElementById('videoControls');
     const videoStats = document.getElementById('videoStats');
     const inputText = document.getElementById('inputText');
+    const pauseBtn = document.getElementById('pauseBtn');
     const echoBtn = document.getElementById('echoBtn');
     const chatBtn = document.getElementById('chatBtn');
 
@@ -596,6 +598,25 @@
         playTimer = null;
       }
     }
+    // 发送 pause 请求
+    async function sendPauseRequest() {
+      try {
+          const response = await fetch('http://localhost:8080/pause', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+          });
+          const data = await response.json();
+          if (data.status === 'success') {
+            log('中止请求发送成功', 'success');
+          } else {
+            log(`中止请求失败: ${data.message}`, 'error');
+          }
+        } catch (error) {
+          log(`发送中止请求时发生错误: ${error.message}`, 'error');
+        }
+    }
 
     // 发送 echo 请求
     async function sendEchoRequest() {
@@ -680,6 +701,7 @@
         }
       });
 
+      pauseBtn.addEventListener('click', sendPauseRequest);
       echoBtn.addEventListener('click', sendEchoRequest);
       chatBtn.addEventListener('click', sendChatRequest);
     }
