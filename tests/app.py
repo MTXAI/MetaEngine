@@ -13,6 +13,7 @@ from engine.config import WAV2LIP_PLAYER_CONFIG, DEFAULT_PROJECT_CONFIG, ONE_API
 from engine.human.avatar import wav2lip
 from engine.human.avatar.avatar import AvatarProcessor
 from engine.human.player import HumanPlayer
+from engine.human.transport import TransportWebRTC
 from engine.human.voice import AliTTSWrapper, EdgeTTSWrapper
 from engine.human.voice.voice import VoiceProcessor
 from engine.utils import Data
@@ -59,6 +60,8 @@ agent = KnowledgeAgent(llm_model, vector_store)
 voice_processor = VoiceProcessor(DEFAULT_VOICE_PROCESSOR_CONFIG)
 avatar_processor = AvatarProcessor(DEFAULT_AVATAR_PROCESSOR_CONFIG)
 
+webrtc_transport = TransportWebRTC(WAV2LIP_PLAYER_CONFIG)
+
 player = HumanPlayer(
     config=WAV2LIP_PLAYER_CONFIG,
     agent=agent,
@@ -68,6 +71,8 @@ player = HumanPlayer(
     voice_processor=voice_processor,
     avatar_processor=avatar_processor,
     loop=loop,
+    main_transport=webrtc_transport,
+    other_transports=None,
 )
 
 # 存储已连接的客户端
@@ -123,8 +128,8 @@ async def websocket_handler(request):
                     pc = RTCPeerConnection()
 
                     # 创建并添加音视频轨道
-                    audio_track = player.get_audio_track()
-                    video_track = player.get_video_track()
+                    audio_track = webrtc_transport.audio_track
+                    video_track = webrtc_transport.video_track
 
                     pc.addTrack(audio_track)
                     pc.addTrack(video_track)
