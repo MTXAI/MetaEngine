@@ -9,12 +9,12 @@ from typing import Union, List, Tuple
 import numpy as np
 import torch
 
-from engine.agent.agents.base_agent import BaseAgent
+from engine.human.character.agent.base_agent import BaseAgent
 from engine.config import PlayerConfig
-from engine.human.avatar.avatar import AvatarModelWrapper, Avatar, AvatarProcessor
+from engine.human.avatar import AvatarModelWrapper, Avatar, AvatarProcessor
 from engine.human.player.state import *
-from engine.human.transport import Transport
-from engine.human.voice.voice import TTSModelWrapper, VoiceProcessor
+from engine.transport import Transport
+from engine.human.voice import TTSModelWrapper, VoiceProcessor
 from engine.utils.data import Data
 
 
@@ -351,6 +351,9 @@ class HumanContainer:
 
     def process_frames_worker(self):
         while not self.stop_event.is_set():
+            if self.get_state() == StatePause:
+                time.sleep(self.timeout)
+                continue
             try:
                 video_frame, audio_frames = self.frame_queue.get(timeout=self.timeout)
             except queue.Empty:

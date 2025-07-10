@@ -8,7 +8,7 @@ from langchain_community.vectorstores.utils import filter_complex_metadata
 from langchain_huggingface import HuggingFaceEmbeddings
 from transformers import AutoTokenizer
 
-from engine.agent.file_rag.file_loader import is_supported_file, load_file
+from engine.human.character.file_rag.file_loader import is_supported_file, load_file
 
 
 def try_load_db(db_path: os.PathLike, doc_dir: os.PathLike=None):

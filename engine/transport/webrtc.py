@@ -10,7 +10,7 @@ from av.frame import Frame
 from av.packet import Packet
 
 from engine.config import PlayerConfig
-from engine.human.transport import Transport
+from engine.transport import Transport
 
 
 class AudioStreamTrack(MediaStreamTrack):

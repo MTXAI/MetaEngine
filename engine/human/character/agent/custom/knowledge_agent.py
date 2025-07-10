@@ -4,7 +4,7 @@ from langchain_chroma import Chroma
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from langchain_openai import ChatOpenAI
 
-from engine.agent.agents.base_agent import BaseAgent
+from engine.human.character.agent.base_agent import BaseAgent
 
 
 class KnowledgeAgent(BaseAgent):

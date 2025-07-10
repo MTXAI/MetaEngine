@@ -1,19 +1,13 @@
 import asyncio
-import logging
-import time
 from typing import Union, List, Tuple
 
-from langchain_openai import ChatOpenAI
-
-from engine.agent.agents.base_agent import BaseAgent
+from engine.human.character.agent.base_agent import BaseAgent
 from engine.config import PlayerConfig
-from engine.human.avatar import AvatarModelWrapper
-from engine.human.avatar.avatar import AvatarProcessor, Avatar
+from engine.human.avatar import AvatarModelWrapper, AvatarProcessor, Avatar
 from engine.human.player.container import HumanContainer
 from engine.human.player.state import *
-from engine.human.transport import Transport
-from engine.human.voice import TTSModelWrapper
-from engine.human.voice.voice import VoiceProcessor
+from engine.transport import Transport
+from engine.human.voice import TTSModelWrapper, VoiceProcessor
 from engine.runtime import thread_pool
 from engine.utils.concurrent.pool import TaskInfo
 from engine.utils import Data
@@ -103,16 +97,20 @@ class HumanPlayer:
 
 
 if __name__ == '__main__':
+    import logging
+    import asyncio
+    import time
 
+    from langchain_openai import ChatOpenAI
     from engine.utils.data import Data
     from engine.config import ONE_API_LLM_MODEL
     from engine.human.voice.tts_ali import AliTTSWrapper
-    from engine.human.voice.tts_edge import EdgeTTSWrapper
-    from engine.agent.agents.custom import SimpleAgent
+    from engine.human.character.agent.custom import SimpleAgent
     from engine.utils import get_file_path
-    from engine.human.avatar import wav2lip
     from engine.config import DEFAULT_VOICE_PROCESSOR_CONFIG, DEFAULT_AVATAR_PROCESSOR_CONFIG, WAV2LIP_PLAYER_CONFIG
-    from engine.human.transport import Transport, TransportWebRTC
+    from engine.transport import Transport, TransportWebRTC
+    from engine.human.avatar import wav2lip, AvatarProcessor, Wav2LipWrapper
+    from engine.human.voice import VoiceProcessor, AliTTSWrapper, EdgeTTSWrapper
 
     a_f = '../../../avatars/wav2lip256_avatar1'
     a_p = get_file_path(a_f)

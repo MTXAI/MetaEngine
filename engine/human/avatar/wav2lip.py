@@ -8,11 +8,10 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG, frame_multiple
+from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
 from engine.human.avatar.avatar import AvatarModelWrapper, Avatar
 from models.wav2lip import Wav2Lip
 from models.wav2lip.audio import melspectrogram
-from models.wav2lip.hparams import hparams
 
 
 def _read_imgs(img_list):
