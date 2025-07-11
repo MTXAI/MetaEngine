@@ -187,7 +187,8 @@ async def echo(request):
                 data=text,
                 is_chat=False,
                 stream=False,
-            )
+            ),
+            # force=True,
         )
         logging.info(res_data)
         return web.json_response({"status": "success", "data": res_data})
@@ -205,7 +206,8 @@ async def chat(request):
                 data=question,
                 is_chat=True,
                 stream=True,
-            )
+            ),
+            # force=True,
         )
         logging.info(res_data)
         return web.json_response({"status": "success", "data": res_data})

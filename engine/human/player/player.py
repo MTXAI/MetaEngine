@@ -65,8 +65,8 @@ class HumanPlayer:
     def pause(self):
         self.container.pause()
 
-    def put_text_data(self, data: Data):
-        return self.container.put_text_data(data)
+    def put_text_data(self, data: Data, force=False):
+        return self.container.put_text_data(data, force)
 
     def start(self):
         if self._start:

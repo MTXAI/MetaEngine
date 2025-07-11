@@ -75,6 +75,7 @@ class HumanContainer:
         self.audio_data_fragment = None
         self.audio_data_count = 0
         self.audio_chunk_batch = []
+        self.silence_flag = False
 
     def swap_state(self, old_state: int, new_state: int):
         res = self.state.swap_state(old_state, new_state)
@@ -91,7 +92,7 @@ class HumanContainer:
 
     def pause(self):
         # 中断数字人当前对话
-        if self.swap_state(StateSpeaking, StatePause):
+        if self.swap_state(StateSpeaking, StatePause) or self.swap_state(StateBusy, StatePause):
             self.text_queue.queue.clear()
             self.audio_queue.queue.clear()
             self.audio_data_fragment = None
@@ -99,11 +100,21 @@ class HumanContainer:
         else:
             logging.info(f"pause failed, human state is {state_str[self.get_state()]}")
 
-    def put_text_data(self, data: Data):
-        if self.get_state() != StateReady:
+    def _need_resume(self):
+        if self.get_state() == StatePause and self.silence_flag:
+            return True
+        else:
+            return False
+
+    def put_text_data(self, data: Data, force=False):
+        if force:
+            self.set_state(StateReady)
+        if self._need_resume():
+            self.swap_state(StatePause, StateReady)
+        if not self.swap_state(StateReady, StateBusy):
             return Data(
                 ok=False,
-                msg=f"human state not ready {state_str[self.get_state()]}",
+                msg=f"human state not ready, state is {state_str[self.get_state()]}",
             )
 
         # 文字预处理操作
@@ -114,8 +125,6 @@ class HumanContainer:
                 ok=False,
                 msg="fuck data",
             )
-
-        self.set_state(StateBusy)
 
         self.text_queue.put(data)
         return Data(
@@ -300,6 +309,7 @@ class HumanContainer:
                     self.audio_chunk_batch.append(audio_chunk)
 
                 # process frames
+                self.silence_flag = silence
                 if silence:
                     for i in range(self.batch_size):
                         frame = self.avatar.get_next_frame()
@@ -328,10 +338,6 @@ class HumanContainer:
 
                 self.audio_chunk_batch = []
                 if is_final:
-                    # 当前状态为 speaking, 等待 transport 消费完最后一个帧, 状态切换回 ready
-                    frame_index = self.avatar.frame_index
-                    while not self.main_transport.is_ready(frame_index-self.fps):
-                        time.sleep(self.timeout)
                     self.set_state(StateReady)
             except Exception as e:
                 logging.info(f"Process audio data error: {e}")
@@ -351,9 +357,6 @@ class HumanContainer:
 
     def process_frames_worker(self):
         while not self.stop_event.is_set():
-            if self.get_state() == StatePause:
-                time.sleep(self.timeout)
-                continue
             try:
                 video_frame, audio_frames = self.frame_queue.get(timeout=self.timeout)
             except queue.Empty:
