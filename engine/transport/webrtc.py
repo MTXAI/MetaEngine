@@ -128,7 +128,7 @@ class TransportWebRTC(Transport):
         new_frame = VideoFrame.from_ndarray(frame, format="bgr24")
         await self.video_track.put_frame(new_frame)
 
-    def start(self):
+    async def start(self):
         pass
 
     def stop(self):

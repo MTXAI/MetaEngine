@@ -10,7 +10,7 @@ class Transport:
     async def put_video_frame(self, frame: np.ndarray):
         pass
 
-    def start(self):
+    async def start(self):
         pass
 
     def stop(self):
