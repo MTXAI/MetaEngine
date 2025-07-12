@@ -10,9 +10,6 @@ class Transport:
     async def put_video_frame(self, frame: np.ndarray):
         pass
 
-    def is_ready(self, frame_index) -> bool:
-        pass
-
     def start(self):
         pass
 

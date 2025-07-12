@@ -128,9 +128,6 @@ class TransportWebRTC(Transport):
         new_frame = VideoFrame.from_ndarray(frame, format="bgr24")
         await self.video_track.put_frame(new_frame)
 
-    def is_ready(self, frame_index) -> bool:
-        return self.video_track.frame_count >= frame_index
-
     def start(self):
         pass
 

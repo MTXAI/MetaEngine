@@ -1,5 +1,4 @@
 from engine.utils.concurrent import SharedFlag
-from engine.utils.concurrent.lock import RWLock
 
 
 StateNotReady = -1

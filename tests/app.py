@@ -69,8 +69,7 @@ player = HumanPlayer(
     voice_processor=voice_processor,
     avatar_processor=avatar_processor,
     loop=loop,
-    main_transport=webrtc_transport,
-    other_transports=None,
+    transports=webrtc_transport,
 )
 
 # 存储已连接的客户端

@@ -24,8 +24,7 @@ class HumanPlayer:
             voice_processor: VoiceProcessor,
             avatar_processor: AvatarProcessor,
             loop: asyncio.AbstractEventLoop,
-            main_transport: Transport,
-            other_transports: Union[Transport, List[Transport], Tuple[Transport]]=None,
+            transports: Union[Transport, List[Transport], Tuple[Transport]]=None,
     ):
         self.config = config
         self.container = HumanContainer(
@@ -37,8 +36,7 @@ class HumanPlayer:
             voice_processor,
             avatar_processor,
             loop,
-            main_transport,
-            other_transports,
+            transports,
         )
         self._start = False
 
@@ -163,8 +161,7 @@ if __name__ == '__main__':
         voice_processor=voice_processor,
         avatar_processor=avatar_processor,
         loop=loop,
-        main_transport=webrtc_transport,
-        other_transports=None,
+        transports=webrtc_transport,
     )
 
     player.start()

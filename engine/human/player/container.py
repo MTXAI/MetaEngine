@@ -31,8 +31,7 @@ class HumanContainer:
             voice_processor: VoiceProcessor,
             avatar_processor: AvatarProcessor,
             loop: asyncio.AbstractEventLoop,
-            main_transport: Transport,
-            other_transports: Union[Transport, List[Transport], Tuple[Transport]]=None,
+            transports: Union[Transport, List[Transport], Tuple[Transport]]=None,
     ):
         self.config = config
         self.agent = agent
@@ -41,14 +40,13 @@ class HumanContainer:
         self.voice_processor = voice_processor
         self.avatar_processor = avatar_processor
         self.loop = loop
-        self.main_transport = main_transport
-        if other_transports is not None:
-            if isinstance(other_transports, Transport):
-                self.other_transports = [other_transports]
+        if transports is not None:
+            if isinstance(transports, Transport):
+                self.transports = [transports]
             else:
-                self.other_transports = list(other_transports)
+                self.transports = list(transports)
         else:
-            self.other_transports = []
+            self.transports = []
 
         # from config
         self.fps = config.fps
@@ -348,13 +346,13 @@ class HumanContainer:
                 time.sleep(self.timeout)
                 continue
 
-    def _send_frames(self, transport, video_frame, audio_frames, main=False):
+    def _send_frames(self, transport, video_frame, audio_frames):
         res = asyncio.run_coroutine_threadsafe(transport.put_video_frame(video_frame), self.loop)
-        if main:  # 适用于 webrtc, 避免由于 frame 生产速率过快时, track 为了对齐时间戳频繁 wait(不精确), 导致帧跳现象(频繁卡顿或是帧过快)
+        if transport.kind == "webrtc":  # 适用于 webrtc, 避免由于 frame 生产速率过快时, track 为了对齐时间戳频繁 wait(不精确), 导致帧跳现象(频繁卡顿或是帧过快)
             res.result()
         for audio_frame in audio_frames:
             res = asyncio.run_coroutine_threadsafe(transport.put_audio_frame(audio_frame), self.loop)
-            if main:
+            if transport.kind == "webrtc":
                 res.result()
 
     def process_frames_worker(self):
@@ -364,9 +362,8 @@ class HumanContainer:
             except queue.Empty:
                 continue
 
-            self._send_frames(self.main_transport, video_frame, audio_frames, main=True)
-            for transport in self.other_transports:
-                self._send_frames(transport, video_frame, audio_frames, main=False)
+            for transport in self.transports:
+                self._send_frames(transport, video_frame, audio_frames)
 
     def shutdown(self):
         self.stop_event.set()
