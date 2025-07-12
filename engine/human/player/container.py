@@ -16,6 +16,7 @@ from engine.human.player.state import *
 from engine.transport import Transport
 from engine.human.voice import TTSModelWrapper, VoiceProcessor
 from engine.utils.data import Data
+from engine.utils.concurrent import SharedFlag
 
 
 class HumanContainer:
@@ -75,7 +76,8 @@ class HumanContainer:
         self.audio_data_fragment = None
         self.audio_data_count = 0
         self.audio_chunk_batch = []
-        self.silence_flag = False
+
+        self.silence_flag = SharedFlag(1)  # 1 静音 0 发声
 
     def swap_state(self, old_state: int, new_state: int):
         res = self.state.swap_state(old_state, new_state)
@@ -96,12 +98,11 @@ class HumanContainer:
             self.text_queue.queue.clear()
             self.audio_queue.queue.clear()
             self.audio_data_fragment = None
-            self.frame_queue.queue.clear()
         else:
             logging.info(f"pause failed, human state is {state_str[self.get_state()]}")
 
     def _need_resume(self):
-        if self.get_state() == StatePause and self.silence_flag:
+        if self.get_state() == StatePause and self.silence_flag.get() == 1:
             return True
         else:
             return False
@@ -309,7 +310,8 @@ class HumanContainer:
                     self.audio_chunk_batch.append(audio_chunk)
 
                 # process frames
-                self.silence_flag = silence
+                silence_flag = 1 if silence else 0
+                self.silence_flag.set(silence_flag)
                 if silence:
                     for i in range(self.batch_size):
                         frame = self.avatar.get_next_frame()

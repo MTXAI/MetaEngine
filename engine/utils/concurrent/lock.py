@@ -93,6 +93,59 @@ class RWLock:
             }
 
 
+class SharedFlag:
+    """
+    支持CAS操作的共享标志类，用于多线程环境下的原子操作
+    """
+    _value = 0
+    _lock = RWLock()  # 用于保证操作的原子性
+    def __init__(self, initial_value):
+        """
+        初始化共享标志
+
+        Args:
+            initial_value: 标志的初始值
+        """
+        self._value = initial_value
+
+    def get(self):
+        """
+        获取当前标志的值
+
+        Returns:
+            当前标志的值
+        """
+        with self._lock.reader_lock():
+            return self._value
+
+    def set(self, new_value):
+        """
+        无条件设置标志的值
+
+        Args:
+            new_value: 要设置的新值
+        """
+        with self._lock.writer_lock():
+            self._value = new_value
+
+    def cas(self, expected_value, new_value):
+        """
+        执行CAS(Compare-and-Swap)操作
+
+        Args:
+            expected_value: 期望的当前值
+            new_value: 若当前值等于expected_value，要设置的新值
+
+        Returns:
+            bool: 操作是否成功
+        """
+        with self._lock.writer_lock():
+            if self._value == expected_value:
+                self._value = new_value
+                return True
+        return False
+
+
 if __name__ == '__main__':
     import threading
     import time
