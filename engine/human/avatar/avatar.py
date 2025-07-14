@@ -112,12 +112,12 @@ class Avatar:
         self.avatar_model = avatar_model
         self.avatar_processor = avatar_processor
 
-    def silence(self, config: PlayerConfig) -> Generator:
+    def silence(self, config: PlayerConfig) -> Generator[np.ndarray, None, None]:
         for i in range(config.batch_size):
             frame = self.avatar_resource.next_frame()
             yield self.avatar_processor.process(frame)
 
-    def speak(self, audio_chunk_batch: List[np.ndarray], config: PlayerConfig) -> Generator:
+    def speak(self, audio_chunk_batch: List[np.ndarray], config: PlayerConfig) -> Generator[np.ndarray, None, None]:
         with torch.no_grad():
             pred_img_batch = self.avatar_model.inference(
                 audio_chunk_batch=audio_chunk_batch,

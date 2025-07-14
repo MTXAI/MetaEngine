@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Generator
+from typing import Callable, Optional, Generator, Tuple
 
 import numpy as np
 from torch import nn
@@ -66,7 +66,7 @@ class Voice:
     def speak(self, text: str) -> Optional[np.ndarray]:
         return self.tts_model.inference(text)
 
-    def realtime_speak(self, generator: Generator, receiver: Callable) -> None:
+    def realtime_speak(self, generator: Generator[Tuple[str, bool], None, None], receiver: Callable) -> None:
         self.tts_model.reset(receiver)
         for text, is_final in generator:
             if is_final:

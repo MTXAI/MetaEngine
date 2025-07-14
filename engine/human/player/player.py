@@ -3,15 +3,13 @@ from typing import Union, List, Tuple
 
 from engine import runtime
 from engine.config import PlayerConfig
-from engine.human.character.agent import Agent
 from engine.human.character import Character
 from engine.human.avatar import Avatar
 from engine.human.player.container import HumanContainer
 from engine.human.player.state import *
 from engine.transport import Transport
 from engine.human.voice import Voice
-from engine.runtime import thread_pool
-from engine.utils.concurrent.pool import TaskInfo
+from engine.utils.concurrent import TaskInfo
 from engine.utils import Data
 
 
@@ -19,7 +17,7 @@ class HumanPlayer:
     def __init__(
             self,
             config: PlayerConfig,
-            character: Character,
+            character: Character,  # todo 直接由 config 构建,
             voice: Voice,
             avatar: Avatar,
             loop: asyncio.AbstractEventLoop,
@@ -42,11 +40,11 @@ class HumanPlayer:
     def is_busy(self):
         return self.container.get_state() == StateBusy or self.container.get_state() == StatePause
 
-    def set_agent(self, agent: Agent) -> bool:
+    def set_character(self, character: Character) -> bool:
         # agent 正在使用中
         if self.container.get_state() == StateBusy:
             return False
-        self.container.agent = agent
+        self.container.character = character
         return True
 
     def set_voice(self, voice: Voice) -> bool:
@@ -65,19 +63,19 @@ class HumanPlayer:
     def start(self):
         if self._start:
             return
-        thread_pool.submit(
+        runtime.submit_task(
             self.container.process_text_data_worker,
             task_info=TaskInfo(
                 name=f"container.process_text_data_worker"
             )
         )
-        thread_pool.submit(
+        runtime.submit_task(
             self.container.process_audio_data_worker,
             task_info=TaskInfo(
                 name=f"container.process_audio_data_worker"
             )
         )
-        thread_pool.submit(
+        runtime.submit_task(
             self.container.process_frames_worker,
             task_info=TaskInfo(
                 name=f"container.process_frames_worker"
@@ -99,7 +97,7 @@ if __name__ == '__main__':
     from engine.utils.data import Data
     from engine.config import ONE_API_LLM_MODEL
     from engine.human.voice.tts_ali import AliTTSWrapper
-    from engine.human.character.agent import SimpleAgent, Agent
+    from engine.human.character.agent import SimpleAgent
     from engine.utils import get_file_path
     from engine.config import DEFAULT_VOICE_PROCESSOR_CONFIG, DEFAULT_AVATAR_PROCESSOR_CONFIG, WAV2LIP_PLAYER_CONFIG
     from engine.transport import Transport, TransportWebRTC

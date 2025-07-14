@@ -116,7 +116,7 @@ class HumanContainer:
             )
 
         # 文字预处理操作
-        if not self.character.check(data.get("data")):
+        if not self.character.precheck(data.get("data")):
             return Data(
                 ok=False,
                 msg=f"Character check failed, invalid input text: {str(data)}",
@@ -242,19 +242,17 @@ class HumanContainer:
                 is_final = False
                 silence = True
                 audio_chunk_batch = []
-                # prepare audio data
                 for i in range(self.batch_size * self.frame_multiple):
                     audio_frame_data = self._read_audio_frame()
-
                     _is_final = audio_frame_data.get("is_final")
                     _state = audio_frame_data.get("state")
+                    _audio_chunk = audio_frame_data.get("data")
+
                     if not is_final:
                         is_final = _is_final
                     if _state == 1:
                         silence = False
-
-                    audio_chunk = audio_frame_data.get("data")
-                    audio_chunk_batch.append(audio_chunk)
+                    audio_chunk_batch.append(_audio_chunk)
 
                 # process frames
                 silence_flag = 1 if silence else 0
@@ -265,9 +263,7 @@ class HumanContainer:
                         audio_frames = audio_chunk_batch[
                                        i * self.frame_multiple:
                                        i * self.frame_multiple + self.frame_multiple]
-                        self.frame_queue.put(
-                            (video_frame, audio_frames)
-                        )
+                        self.frame_queue.put((video_frame, audio_frames))
                         i += 1
                 else:
                     # 当前状态为 busy, 切换为 speaking
@@ -277,9 +273,7 @@ class HumanContainer:
                         audio_frames = audio_chunk_batch[
                                        i * self.frame_multiple:
                                        i * self.frame_multiple + self.frame_multiple]
-                        self.frame_queue.put(
-                            (video_frame, audio_frames)
-                        )
+                        self.frame_queue.put((video_frame, audio_frames))
                         i += 1
 
                 if is_final:
@@ -291,17 +285,6 @@ class HumanContainer:
                 time.sleep(self.timeout)
                 continue
 
-    def _send_frames(self, transport, video_frame, audio_frames):
-        res = asyncio.run_coroutine_threadsafe(transport.put_video_frame(video_frame), self.loop)
-        if transport.kind == "webrtc":  # 适用于 webrtc, 避免由于 frame 生产速率过快时, track 为了对齐时间戳频繁 wait(不精确), 导致帧跳现象(频繁卡顿或是帧过快)
-            res.result()
-        for audio_frame in audio_frames:
-            # todo 是否所有 transport 都需要将音频转换为 pcm 格式? 如果不是 把这个代码移到 webrtc 中去
-            audio_frame = (audio_frame * 32767).astype(np.int16)  # to pcm
-            res = asyncio.run_coroutine_threadsafe(transport.put_audio_frame(audio_frame), self.loop)
-            if transport.kind == "webrtc":
-                res.result()
-
     def process_frames_worker(self):
         while not self.stop_event.is_set():
             try:
@@ -310,7 +293,15 @@ class HumanContainer:
                 continue
 
             for transport in self.transports.values():
-                self._send_frames(transport, video_frame, audio_frames)
+                res = asyncio.run_coroutine_threadsafe(transport.put_video_frame(video_frame), self.loop)
+                if transport.kind == "webrtc":  # 适用于 webrtc, 避免由于 frame 生产速率过快时, track 为了对齐时间戳频繁 wait(不精确), 导致帧跳现象(频繁卡顿或是帧过快)
+                    res.result()
+                for audio_frame in audio_frames:
+                    # todo 是否所有 transport 都需要将音频转换为 pcm 格式? 如果不是 把这个代码移到 webrtc 中去
+                    audio_frame = (audio_frame * 32767).astype(np.int16)  # to pcm
+                    res = asyncio.run_coroutine_threadsafe(transport.put_audio_frame(audio_frame), self.loop)
+                    if transport.kind == "webrtc":
+                        res.result()
 
     def shutdown(self):
         self.stop_event.set()

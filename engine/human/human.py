@@ -3,7 +3,7 @@
 # todo voice, avatar, character 都用 config 来构建, 包括 human 都有对应的 factory
 class Human:
     """
-    数字人（AI Human）高级接口，封装数字人构建、组件管理、运行控制、查询与功能调用。
+    数字人构建、组件管理、运行控制、状态查询与功能调用。
     """
     def __init__(self, voice=None, avatar=None, character=None):
         pass
@@ -52,22 +52,11 @@ class Human:
 
     # ----------------- 功能调用接口 -----------------
     def say(self, text):
-        """
-        让数字人说出文本内容。
-        :param text: 待说出的文本
-        """
-        if self.voice:
-            # TODO: 调用 voice 组件播放文本
-            pass
+        pass
 
-    def ask(self, question):
-        """
-        向数字人提出问题并获取回答。
-        :param question: 问题文本
-        :return: 回答文本
-        """
-        if self.character:
-            # TODO: 基于 character 组件生成回答
-            answer = ""
-            return answer
-        return None
+    def answer(self, question):
+        pass
+
+    def execute(self):
+        pass
+

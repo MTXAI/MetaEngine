@@ -17,7 +17,8 @@ class Character:
         self.agent_processor = agent_processor
         self.agent_prompt = agent_prompt
 
-    def check(self, question: str) -> bool:
+    def precheck(self, question: str) -> bool:
+        # 检查问题合法性
         return True
 
     def answer(self, question: str, **kwargs) -> str:
