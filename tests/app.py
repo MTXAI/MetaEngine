@@ -7,7 +7,9 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
 from langchain_openai import ChatOpenAI
 
 from engine import runtime
-from engine.human.character.agent import KnowledgeAgent
+from engine.human.character import Character
+from engine.human.character.processor import BaseProcessor
+from engine.human.character.agent import KnowledgeAgent, SimpleAgent
 from engine.human.character.vecdb.chroma import try_load_db
 from engine.config import WAV2LIP_PLAYER_CONFIG, DEFAULT_PROJECT_CONFIG, ONE_API_LLM_MODEL, \
     DEFAULT_VOICE_PROCESSOR_CONFIG, DEFAULT_AVATAR_PROCESSOR_CONFIG
@@ -50,11 +52,14 @@ llm_model = ChatOpenAI(
     api_key=ONE_API_LLM_MODEL.api_key,
     base_url=ONE_API_LLM_MODEL.api_base_url,
 )
-# agent = SimpleAgent(llm_model)
 
-vector_store = try_load_db(DEFAULT_PROJECT_CONFIG.vecdb_path, DEFAULT_PROJECT_CONFIG.docs_path)
-agent = KnowledgeAgent(llm_model, vector_store)
-
+agent = SimpleAgent(llm_model)
+# vector_store = try_load_db(DEFAULT_PROJECT_CONFIG.vecdb_path, DEFAULT_PROJECT_CONFIG.docs_path)
+# agent = KnowledgeAgent(llm_model, vector_store)
+character = Character(
+    agent_model=agent,
+    agent_processor=BaseProcessor(),  # 可以自定义处理器
+)
 voice_processor = VoiceProcessor(DEFAULT_VOICE_PROCESSOR_CONFIG)
 avatar_processor = AvatarProcessor(DEFAULT_AVATAR_PROCESSOR_CONFIG)
 
@@ -71,11 +76,11 @@ voice = Voice(
 )
 player = HumanPlayer(
     config=WAV2LIP_PLAYER_CONFIG,
-    agent=agent,
+    character=character,
     avatar=avatar,
     voice=voice,
     loop=runtime.main_loop,
-    transports=webrtc_transport,
+    transports=[webrtc_transport],
 )
 
 # 存储已连接的客户端

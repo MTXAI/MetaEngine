@@ -1,8 +1,13 @@
-from engine.human.character.agent.base_agent import BaseAgent
+from engine.human.character.agent import Agent
 from engine.human.character.processor.processor import BaseProcessor
 
 class Character:
-    def __init__(self, agent_model: BaseAgent, agent_processor: BaseProcessor, agent_prompt: str = None):
+    def __init__(
+        self,
+        agent_model: Agent,
+        agent_processor: BaseProcessor,
+        agent_prompt: str = None,
+    ):
         """
         agent_model: 代理的核心模型，需继承自BaseAgent
         agent_prompt: 角色的提示词或模板
@@ -11,6 +16,9 @@ class Character:
         self.agent_model = agent_model
         self.agent_processor = agent_processor
         self.agent_prompt = agent_prompt
+
+    def check(self, question: str) -> bool:
+        return True
 
     def answer(self, question: str, **kwargs) -> str:
         # 可在此处加入prompt、rag、processor等逻辑

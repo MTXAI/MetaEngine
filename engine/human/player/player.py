@@ -4,6 +4,7 @@ from typing import Union, List, Tuple
 from engine import runtime
 from engine.config import PlayerConfig
 from engine.human.character.agent import Agent
+from engine.human.character import Character
 from engine.human.avatar import Avatar
 from engine.human.player.container import HumanContainer
 from engine.human.player.state import *
@@ -18,16 +19,16 @@ class HumanPlayer:
     def __init__(
             self,
             config: PlayerConfig,
-            agent: Agent,
+            character: Character,
             voice: Voice,
             avatar: Avatar,
             loop: asyncio.AbstractEventLoop,
-            transports: Union[Transport, List[Transport], Tuple[Transport]]=None,
+            transports: List[Transport]=None,
     ):
         self.config = config
         self.container = HumanContainer(
             self.config,
-            agent,
+            character,
             voice,
             avatar,
             loop,
@@ -104,6 +105,7 @@ if __name__ == '__main__':
     from engine.transport import Transport, TransportWebRTC
     from engine.human.avatar import wav2lip, AvatarProcessor
     from engine.human.voice import VoiceProcessor, AliTTSWrapper
+    from engine.human.character.processor import BaseProcessor
 
     a_f = '../../../avatars/wav2lip256_avatar1'
     a_p = get_file_path(a_f)
@@ -137,6 +139,10 @@ if __name__ == '__main__':
         base_url=ONE_API_LLM_MODEL.api_base_url,
     )
     agent = SimpleAgent(llm_model)
+    character = Character(
+        agent_model=agent,
+        agent_processor=BaseProcessor(),  # 可以自定义处理器
+    )
 
     # vector_store = try_load_db(DEFAULT_PROJECT_CONFIG.vecdb_path, DEFAULT_PROJECT_CONFIG.docs_path)
     # agent = KnowledgeAgent(llm_model, vector_store)
@@ -157,11 +163,11 @@ if __name__ == '__main__':
     )
     player = HumanPlayer(
         config=WAV2LIP_PLAYER_CONFIG,
-        agent=agent,
+        character=character,
         avatar=avatar,
         voice=voice,
         loop=runtime.main_loop,
-        transports=webrtc_transport,
+        transports=[webrtc_transport],
     )
 
     player.start()

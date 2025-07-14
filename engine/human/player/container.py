@@ -8,7 +8,7 @@ from typing import Union, List, Tuple
 
 import numpy as np
 
-from engine.human.character.agent import Agent
+from engine.human.character import Character
 from engine.config import PlayerConfig
 from engine.human.avatar import Avatar
 from engine.human.player.state import *
@@ -23,14 +23,14 @@ class HumanContainer:
     def __init__(
             self,
             config: PlayerConfig,
-            agent: Agent,
+            character: Character,
             voice: Voice,
             avatar: Avatar,
             loop: asyncio.AbstractEventLoop,
             transports: List[Transport]=None,
     ):
         self.config = config
-        self.agent = agent
+        self.character = character
         self.avatar = avatar
         self.voice = voice
         self.loop = loop
@@ -116,7 +116,11 @@ class HumanContainer:
             )
 
         # 文字预处理操作
-        # todo, 预处理和过滤（例如违法规定的文字）, 直接返回错误, 不放入队列, 由 character 接口实现
+        if not self.character.check(data.get("data")):
+            return Data(
+                ok=False,
+                msg=f"Character check failed, invalid input text: {str(data)}",
+            )
 
         self.text_queue.put(data)
         return Data(
@@ -163,7 +167,7 @@ class HumanContainer:
             )
 
     def _streaming_answer_generator(self, text: str):
-        for answer in self.agent.stream_answer(question=text):
+        for answer in self.character.stream_answer(question=text):
             yield answer, self.get_state() == StatePause
         yield "", True
 
@@ -193,7 +197,7 @@ class HumanContainer:
                             receiver=self._produce_audio_data,
                         )
                     else:
-                        text = self.agent.answer(question=text)
+                        text = self.character.answer(question=text)
                         speech = self.voice.speak(text)
                         self._produce_audio_data(speech)
                 self.audio_queue.put(

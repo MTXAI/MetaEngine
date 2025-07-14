@@ -3,7 +3,7 @@ from typing import Callable
 
 import edge_tts
 
-from engine.human.voice.base import TTSModelWrapper
+from engine.human.voice.voice import TTSModelWrapper
 from engine.utils.sound import resample_sound
 
 
