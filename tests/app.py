@@ -6,14 +6,15 @@ from aiohttp import web, WSMessage
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
 from langchain_openai import ChatOpenAI
 
-from engine.human.character.agent.custom import KnowledgeAgent
+from engine import runtime
+from engine.human.character.agent import KnowledgeAgent
 from engine.human.character.vecdb.chroma import try_load_db
 from engine.config import WAV2LIP_PLAYER_CONFIG, DEFAULT_PROJECT_CONFIG, ONE_API_LLM_MODEL, \
     DEFAULT_VOICE_PROCESSOR_CONFIG, DEFAULT_AVATAR_PROCESSOR_CONFIG
-from engine.human.avatar import wav2lip, AvatarProcessor
+from engine.human.avatar import wav2lip, AvatarProcessor, Avatar
 from engine.human.player import HumanPlayer
 from engine.transport import TransportWebRTC
-from engine.human.voice import AliTTSWrapper, EdgeTTSWrapper, VoiceProcessor
+from engine.human.voice import AliTTSWrapper, EdgeTTSWrapper, VoiceProcessor, Voice
 from engine.utils import Data
 
 a_f = '../avatars/wav2lip256_avatar1'
@@ -34,11 +35,10 @@ tts_model_edge = EdgeTTSWrapper(
 tts_models = [tts_model_ali, tts_model_edge]
 tts_model_idx = 0
 
-avatar = wav2lip.load_avatar(a_f)
-avatar_model = wav2lip.Wav2LipWrapper(c_f, avatar)
+avatar_resource = wav2lip.load_avatar_resource(a_f)
+avatar_model = wav2lip.Wav2LipWrapper(c_f)
 
 # 创建Player实例并启动
-loop = asyncio.new_event_loop()
 
 # llm_model = ChatOpenAI(
 #     model=QWEN_LLM_MODEL.model_id,
@@ -60,15 +60,21 @@ avatar_processor = AvatarProcessor(DEFAULT_AVATAR_PROCESSOR_CONFIG)
 
 webrtc_transport = TransportWebRTC(WAV2LIP_PLAYER_CONFIG)
 
+avatar = Avatar(
+    avatar_resource=avatar_resource,
+    avatar_model=avatar_model,
+    avatar_processor=avatar_processor,
+)
+voice = Voice(
+    tts_model=tts_models[tts_model_idx],
+    voice_processor=voice_processor,
+)
 player = HumanPlayer(
     config=WAV2LIP_PLAYER_CONFIG,
     agent=agent,
-    tts_model=tts_models[tts_model_idx],
     avatar=avatar,
-    avatar_model=avatar_model,
-    voice_processor=voice_processor,
-    avatar_processor=avatar_processor,
-    loop=loop,
+    voice=voice,
+    loop=runtime.main_loop,
     transports=webrtc_transport,
 )
 
@@ -225,15 +231,14 @@ def main():
 
     # 启动服务器
     runner = web.AppRunner(app)
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(runner.setup())
+    runtime.run_until_complete(runner.setup())
     site = web.TCPSite(runner, "0.0.0.0", 8080)
-    loop.run_until_complete(site.start())
+    runtime.run_until_complete(site.start())
 
     player.start()
 
     logging.info("服务器已启动，访问 http://localhost:8080")
-    loop.run_forever()
+    runtime.run_forever()
 
 
 if __name__ == "__main__":

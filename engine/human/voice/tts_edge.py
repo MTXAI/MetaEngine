@@ -3,7 +3,7 @@ from typing import Callable
 
 import edge_tts
 
-from engine.human.voice.voice import TTSModelWrapper
+from engine.human.voice.base import TTSModelWrapper
 from engine.utils.sound import resample_sound
 
 
@@ -39,7 +39,6 @@ class EdgeTTSWrapper(TTSModelWrapper):
         return self.inference(text)
 
     def inference(self, text):
-        assert self.inited
         self._communicating(text)
         speech = resample_sound(self.buffer, self.sample_rate)
         self.buffer.seek(0)

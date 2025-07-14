@@ -9,7 +9,7 @@ import torch
 from tqdm import tqdm
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
-from engine.human.avatar.avatar import AvatarModelWrapper, Avatar
+from engine.human.avatar.base import AvatarModelWrapper, AvatarResource
 from models.wav2lip import Wav2Lip
 from models.wav2lip.audio import melspectrogram
 
@@ -22,12 +22,12 @@ def _read_imgs(img_list):
     return frames
 
 
-def gen_avatar() -> Avatar:
+def gen_avatar() -> AvatarResource:
     pass
 
 
 # todo 实现 register, 注册 load, gen 和 模型
-def load_avatar(avatar_path):
+def load_avatar_resource(avatar_path):
     full_imgs_path = f"{avatar_path}/full_imgs"
     face_imgs_path = f"{avatar_path}/face_imgs"
     coords_path = f"{avatar_path}/coords.pkl"
@@ -42,7 +42,7 @@ def load_avatar(avatar_path):
     input_face_list = sorted(input_face_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
     face_list_cycle = _read_imgs(input_face_list)
 
-    return Avatar(
+    return AvatarResource(
         dict(
             frame_cycle=frame_list_cycle,
             bbox_cycle=coord_list_cycle,
@@ -52,10 +52,9 @@ def load_avatar(avatar_path):
 
 
 class Wav2LipWrapper(AvatarModelWrapper):
-    def __init__(self, ckpt_path: str, avatar: Avatar):
+    def __init__(self, ckpt_path: str):
         super().__init__()
         self.ckpt_path = ckpt_path
-        self.avatar: Avatar = avatar
         self.backbone = None
         self.load_backbone()
 
@@ -94,6 +93,7 @@ class Wav2LipWrapper(AvatarModelWrapper):
     def inference(
         self,
         audio_chunk_batch: List[np.ndarray],
+        avatar_resource: AvatarResource,
         config: PlayerConfig,
         **kwargs
     ) -> np.ndarray:
@@ -103,8 +103,8 @@ class Wav2LipWrapper(AvatarModelWrapper):
 
         face_img_batch = []
         for i in range(config.batch_size):
-            frame_index = self.avatar.mirror_frame_index(self.avatar.frame_index + i)
-            face_img = self.avatar.get_any_data(frame_index, data_type="face_cycle")
+            frame_index = avatar_resource.mirror_frame_index(avatar_resource.frame_index + i)
+            face_img = avatar_resource.get_any_data(frame_index, data_type="face_cycle")
             face_img_batch.append(face_img)
         face_img_batch = np.asarray(face_img_batch)
         face_img_batch = torch.FloatTensor(face_img_batch).to(DEFAULT_RUNTIME_CONFIG.device)

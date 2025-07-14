@@ -3,7 +3,7 @@ from typing import Callable
 import dashscope
 from dashscope.audio.tts_v2 import *
 
-from engine.human.voice.voice import TTSModelWrapper
+from engine.human.voice.base import TTSModelWrapper
 from engine.utils.sound import resample_sound_raw
 
 
@@ -98,7 +98,6 @@ class AliTTSWrapper(TTSModelWrapper):
     def reset(self, fn: Callable):
         self.inited = True
         self._init_streaming_synthesizer(fn)
-        self._init_synthesizer()
 
     def complete(self):
         self.inited = False
@@ -121,7 +120,8 @@ class AliTTSWrapper(TTSModelWrapper):
 
 
     def inference(self, text):
-        assert self.inited
+        self._init_synthesizer()
+
         buffer_data = self.synthesizer.call(text)
         if buffer_data is None:
             return None

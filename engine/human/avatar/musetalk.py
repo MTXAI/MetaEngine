@@ -4,7 +4,7 @@ import numpy as np
 from transformers import WhisperModel, WhisperPreTrainedModel
 
 from engine.config import PlayerConfig, DEFAULT_RUNTIME_CONFIG
-from engine.human.avatar import AvatarModelWrapper
+from engine.human.avatar import AvatarModelWrapper, AvatarResource
 from models.musetalk.models.unet import UNet, PositionalEncoding
 from models.musetalk.models.vae import VAE
 from models.musetalk.utils.audio_processor import AudioProcessor
@@ -16,7 +16,6 @@ class MuseTalkWrapper(AvatarModelWrapper):
             unet_dir,
             vae_dir,
             whisper_dir,
-            avatar,
     ):
         super().__init__()
         self.unet_dir = unet_dir
@@ -27,7 +26,6 @@ class MuseTalkWrapper(AvatarModelWrapper):
         self.pe = None
         self.whisper = None
         self.audio_processor = None
-        self.avatar = avatar
         self.load_backbone()
 
     def load_backbone(self):
@@ -53,21 +51,17 @@ class MuseTalkWrapper(AvatarModelWrapper):
         self.audio_processor = AudioProcessor(feature_extractor_path=self.whisper_dir)
 
     def inference(
-            self,
-            audio_chunk_batch: List[np.ndarray],
-            config: PlayerConfig,
-            **kwargs
+        self,
+        audio_chunk_batch: List[np.ndarray],
+        avatar_resource: AvatarResource,
+        config: PlayerConfig,  # todo 修改 config 为指定的
+        **kwargs,
     ) -> np.ndarray:
-        # audio_feature_batch = pe(whisper_batch)
-        # latent_batch = []
-        # for face_img in face_img_batch:
-        #     latent_batch.append(
-        #         self.vae.get_latents_for_unet(face_img)
-        #     )
-        # latent_batch = latent_batch.to(dtype=unet.model.dtype)
-        #
-        # pred_latents = unet.model(latent_batch, timesteps, encoder_hidden_states=audio_feature_batch).sample
-        # recon = vae.decode_latents(pred_latents)
-        # for res_frame in recon:
-        #     res_frame_list.append(res_frame)
+        """
+        通过音频特征和人脸图像, 预测口型图像
+        :param audio_chunk_batch:
+        :param avatar_resource:
+        :param config:
+        :return:
+        """
         pass

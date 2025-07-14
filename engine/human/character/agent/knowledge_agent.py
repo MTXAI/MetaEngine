@@ -4,10 +4,10 @@ from langchain_chroma import Chroma
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from langchain_openai import ChatOpenAI
 
-from engine.human.character.agent.base_agent import BaseAgent
+from engine.human.character.agent.base import Agent
 
 
-class KnowledgeAgent(BaseAgent):
+class KnowledgeAgent(Agent):
     """
     只与大模型交互一次，先联网搜索和查找rag，将结果放入prompt，最后流式返回query结果
     """

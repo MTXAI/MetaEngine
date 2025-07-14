@@ -1,5 +1,5 @@
 import copy
-from typing import List, Tuple
+from typing import List, Tuple, Generator
 
 import cv2
 import numpy as np
@@ -8,10 +8,9 @@ from torch import nn
 
 from engine.config import PlayerConfig, AvatarProcessorConfig
 from engine.utils import EasyDict
-from engine.utils.data import Data
 
 
-class Avatar(EasyDict):
+class AvatarResource(EasyDict):
     def __init__(self, avatar_resource: dict):
         super().__init__(avatar_resource)
 
@@ -47,7 +46,7 @@ class Avatar(EasyDict):
     def get_any_data(self, frame_index, data_type: str) -> np.ndarray:
         return getattr(self, data_type)[frame_index]
 
-    def get_next_frame(self):
+    def next_frame(self):
         frame_index = self.mirror_frame_index(self.frame_index)
         frame = self.get_frame(frame_index)
         self.update_frame_index(1)
@@ -65,9 +64,6 @@ class Avatar(EasyDict):
 
 
 class AvatarProcessor:
-    """
-    todo 对于每一帧, 做各种后处理
-    """
     def __init__(self, config: AvatarProcessorConfig):
         self.config = config
 
@@ -90,16 +86,45 @@ class AvatarModelWrapper(nn.Module):
 
     def inference(
         self,
-        audio_feature_batch: List[np.ndarray],
-        config: PlayerConfig,
+        audio_chunk_batch: List[np.ndarray],
+        avatar_resource: AvatarResource,
+        config: PlayerConfig,  # todo 修改 config 为指定的
         **kwargs,
     ) -> np.ndarray:
         """
         通过音频特征和人脸图像, 预测口型图像
-        :param audio_feature_batch:
-        :param face_img_batch:
+        :param audio_chunk_batch:
+        :param avatar_resource:
         :param config:
         :return:
         """
         pass
+
+
+class Avatar:
+    def __init__(
+        self,
+        avatar_resource: AvatarResource,
+        avatar_model: AvatarModelWrapper,
+        avatar_processor: AvatarProcessor,
+    ):
+        self.avatar_resource = avatar_resource
+        self.avatar_model = avatar_model
+        self.avatar_processor = avatar_processor
+
+    def silence(self, config: PlayerConfig) -> Generator:
+        for i in range(config.batch_size):
+            frame = self.avatar_resource.next_frame()
+            yield self.avatar_processor.process(frame)
+
+    def speak(self, audio_chunk_batch: List[np.ndarray], config: PlayerConfig) -> Generator:
+        with torch.no_grad():
+            pred_img_batch = self.avatar_model.inference(
+                audio_chunk_batch=audio_chunk_batch,
+                avatar_resource=self.avatar_resource,
+                config=config,
+            )
+        for i, pred in enumerate(pred_img_batch):
+            frame = self.avatar_resource.render_frame(pred)
+            yield self.avatar_processor.process(frame)
 

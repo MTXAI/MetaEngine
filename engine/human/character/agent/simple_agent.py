@@ -2,10 +2,11 @@ from typing import Generator
 
 from langchain_openai import ChatOpenAI
 
-from engine.human.character.agent.base_agent import BaseAgent
+from engine.human.character.agent.base import Agent
+from engine.human.character.character import Character
 
 
-class SimpleAgent(BaseAgent):
+class SimpleAgent(Agent):
     """
     只与大模型交互一次，先联网搜索和查找rag，将结果放入prompt，最后流式返回query结果
     """

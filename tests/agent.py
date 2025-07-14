@@ -5,8 +5,8 @@ from langchain_openai import ChatOpenAI
 from smolagents import OpenAIServerModel, FinalAnswerStep
 
 from engine.human.character.agent.custom import SimpleAgent
-from engine.human.character.agent.custom.knowledge_agent import KnowledgeAgent
-from engine.human.character.agent.smol.agents import QaAgent
+from engine.human.character.agent.knowledge_agent import KnowledgeAgent
+from engine.human.character.agent.qa_agent import QaAgent
 from engine.human.character.model import History
 from engine.human.character.tools import RetrieverTool
 from engine.human.character.vecdb.chroma import clean_db, create_db

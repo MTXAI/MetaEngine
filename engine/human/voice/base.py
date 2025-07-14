@@ -1,9 +1,10 @@
-from typing import Callable
+from typing import Callable, Optional, Generator
 
 import numpy as np
 from torch import nn
 
 from engine.config import VoiceProcessorConfig
+from engine.utils import Data
 
 
 class VoiceProcessor:
@@ -49,4 +50,28 @@ class TTSModelWrapper(nn.Module):
         """
         输入文本, 输出音频
         """
-        assert self.inited
+        pass
+
+
+class Voice:
+    def __init__(
+        self,
+        tts_model: TTSModelWrapper,
+        voice_processor: VoiceProcessor,
+    ):
+        self.tts_model = tts_model
+        # todo process 做变声或其他处理
+        self.voice_processor = voice_processor
+
+    def speak(self, text: str) -> Optional[np.ndarray]:
+        return self.tts_model.inference(text)
+
+    def realtime_speak(self, generator: Generator, receiver: Callable) -> None:
+        self.tts_model.reset(receiver)
+        for text, is_final in generator:
+            if is_final:
+                break
+            if len(text) > 0:
+                self.tts_model.streaming_inference(text)
+        self.tts_model.complete()
+

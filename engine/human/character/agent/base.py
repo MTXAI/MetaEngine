@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Generator
 
 
-class BaseAgent(ABC):
+class Agent(ABC):
     @abstractmethod
     def stream_answer(self, question: str, **kwargs) -> Generator[str, None, None]:
         """

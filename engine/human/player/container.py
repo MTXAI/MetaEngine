@@ -7,14 +7,13 @@ import traceback
 from typing import Union, List, Tuple
 
 import numpy as np
-import torch
 
-from engine.human.character.agent.base_agent import BaseAgent
+from engine.human.character.agent import Agent
 from engine.config import PlayerConfig
-from engine.human.avatar import AvatarModelWrapper, Avatar, AvatarProcessor
+from engine.human.avatar import Avatar
 from engine.human.player.state import *
 from engine.transport import Transport
-from engine.human.voice import TTSModelWrapper, VoiceProcessor
+from engine.human.voice import Voice
 from engine.utils.data import Data
 from engine.utils.concurrent import SharedFlag
 
@@ -24,44 +23,28 @@ class HumanContainer:
     def __init__(
             self,
             config: PlayerConfig,
-            agent: BaseAgent,
-            tts_model: TTSModelWrapper,
+            agent: Agent,
+            voice: Voice,
             avatar: Avatar,
-            avatar_model: AvatarModelWrapper,
-            voice_processor: VoiceProcessor,
-            avatar_processor: AvatarProcessor,
             loop: asyncio.AbstractEventLoop,
-            transports: Union[Transport, List[Transport], Tuple[Transport]]=None,
+            transports: List[Transport]=None,
     ):
         self.config = config
         self.agent = agent
-        self.tts_model = tts_model
-        self.avatar_model = avatar_model
-        self.voice_processor = voice_processor
-        self.avatar_processor = avatar_processor
+        self.avatar = avatar
+        self.voice = voice
         self.loop = loop
         self.transports = {}
         if transports is not None:
-            if isinstance(transports, Transport):
-                self.transports[transports.kind] = transports
-            else:
-                for transport in transports:
-                    self.transports[transport.kind] = transport
-        else:
-            self.transports = {}
+            for transport in transports:
+                self.transports[transport.kind] = transport
 
         # from config
         self.fps = config.fps
-        self.sample_rate = config.sample_rate
         self.timeout = config.timeout
-        self.audio_ptime = config.audio_ptime
-        self.video_ptime = config.video_ptime
         self.frame_multiple = config.frame_multiple
-        self.chunk_size = int(self.sample_rate / self.fps)
+        self.chunk_size = int(config.sample_rate / self.fps)
         self.batch_size = config.batch_size
-
-        # avatar
-        self.avatar: Avatar = avatar
 
         # runtime control
         self.state =  HumanState(StateReady)
@@ -74,9 +57,6 @@ class HumanContainer:
 
         # temp
         self.audio_data_fragment = None
-        self.audio_data_count = 0
-        self.audio_chunk_batch = []
-
         self.silence_flag = SharedFlag(1)  # 1 静音 0 发声
 
     def swap_state(self, old_state: int, new_state: int):
@@ -136,13 +116,7 @@ class HumanContainer:
             )
 
         # 文字预处理操作
-        text = data.get("data")
-        if text.startswith("fuck"):
-            # todo, 预处理和过滤（例如违法规定的文字）, 直接返回错误, 不放入队列
-            return Data(
-                ok=False,
-                msg="fuck data",
-            )
+        # todo, 预处理和过滤（例如违法规定的文字）, 直接返回错误, 不放入队列, 由 character 接口实现
 
         self.text_queue.put(data)
         return Data(
@@ -168,44 +142,6 @@ class HumanContainer:
                 audio_data_chunks.append(chunk)
         return audio_data_chunks
 
-    def _generate_answer_data(self, text_data: Data):
-        text = text_data.get("data")
-        is_chat = text_data.get("is_chat", False)
-        stream = text_data.get("stream")
-        logging.info(f"开始消费文本数据: {text}, is_chat={is_chat}, stream={stream}")
-
-        final_data = Data(
-            data="",
-            is_final=True,
-        )
-        echo_data = Data(
-            data=text,
-            is_final=False,
-        )
-        if text is None or text == "":
-            yield final_data
-            return
-        if not is_chat:
-            yield echo_data  # todo echo data 做拆分
-            yield final_data
-            return
-
-        if stream:
-            for answer in self.agent.stream_answer(question=text):
-                answer_data = Data(
-                    data=answer,
-                    is_final=False,
-                )
-                yield answer_data
-            yield final_data
-        else:
-            answer_data = Data(
-                data=self.agent.answer(question=text),
-                is_final=False,
-            )
-            yield answer_data
-            yield final_data
-
     def _produce_audio_data(self, speech: np.ndarray):
         if self.get_state() == StatePause:
             return
@@ -219,13 +155,17 @@ class HumanContainer:
             audio_data
         )
         for i, chunk in enumerate(audio_data_chunks):
-            self.audio_data_count += 1
             self.audio_queue.put(
                 Data(
                     data=chunk,
                     is_final=False,
                 )
             )
+
+    def _streaming_answer_generator(self, text: str):
+        for answer in self.agent.stream_answer(question=text):
+            yield answer, self.get_state() == StatePause
+        yield "", True
 
     def process_text_data_worker(self):
         """
@@ -238,27 +178,24 @@ class HumanContainer:
                 text_data = self.text_queue.get(timeout=1)
             except queue.Empty:
                 continue
-            stream = text_data.get("stream", False)
-            self.audio_data_count = 0
+            text = text_data.get("data")
+            is_chat = text_data.get("is_chat", False)
+            stream = text_data.get("stream")
+            logging.info(f"开始消费文本数据: {text}, is_chat={is_chat}, stream={stream}")
             try:
-                self.tts_model.reset(self._produce_audio_data)
-                for answer_data in self._generate_answer_data(text_data):
-                    if self.get_state() == StatePause:
-                        break
-                    answer = answer_data.get("data")
-                    is_final = answer_data.get("is_final")
-                    if len(answer) > 0 and not is_final:
-                        # todo, 判断 answer是否仅为标点符号, 以及做一定的组装后再调用 tts model
-                        logging.info(f"Answer: {answer}, is_final={is_final}")
-                        if stream:
-                            self.tts_model.streaming_inference(answer)
-                        else:
-                            speech = self.tts_model.inference(answer)
-                            self._produce_audio_data(speech)
-                    elif len(answer) == 0 and not is_final:
-                        continue
-                self.tts_model.complete()
-                logging.info("final frame")
+                if not is_chat:
+                    speech = self.voice.speak(text)
+                    self._produce_audio_data(speech)
+                else:
+                    if stream:
+                        self.voice.realtime_speak(
+                            generator=self._streaming_answer_generator(text),
+                            receiver=self._produce_audio_data,
+                        )
+                    else:
+                        text = self.agent.answer(question=text)
+                        speech = self.voice.speak(text)
+                        self._produce_audio_data(speech)
                 self.audio_queue.put(
                     Data(
                         data=None,
@@ -295,22 +232,12 @@ class HumanContainer:
         )
         return data
 
-    def _process_audio_frame(self, chunk):
-        chunk = self.voice_processor.process(chunk)
-        chunk = (chunk * 32767).astype(np.int16)  # to pcm
-        return chunk
-
-    def _process_video_frame(self, image):
-        image = self.avatar_processor.process(image)
-        return image
-
     def process_audio_data_worker(self):
         while not self.stop_event.is_set():
             try:
                 is_final = False
                 silence = True
-                audio_frame_batch = []
-
+                audio_chunk_batch = []
                 # prepare audio data
                 for i in range(self.batch_size * self.frame_multiple):
                     audio_frame_data = self._read_audio_frame()
@@ -323,39 +250,34 @@ class HumanContainer:
                         silence = False
 
                     audio_chunk = audio_frame_data.get("data")
-                    audio_frame_batch.append(self._process_audio_frame(audio_chunk))
-                    self.audio_chunk_batch.append(audio_chunk)
+                    audio_chunk_batch.append(audio_chunk)
 
                 # process frames
                 silence_flag = 1 if silence else 0
                 self.silence_flag.set(silence_flag)
                 if silence:
-                    for i in range(self.batch_size):
-                        frame = self.avatar.get_next_frame()
-                        video_frame = self._process_video_frame(frame)
-                        audio_frames = audio_frame_batch[
+                    i = 0
+                    for video_frame in self.avatar.silence(self.config):
+                        audio_frames = audio_chunk_batch[
                                        i * self.frame_multiple:
                                        i * self.frame_multiple + self.frame_multiple]
                         self.frame_queue.put(
                             (video_frame, audio_frames)
                         )
+                        i += 1
                 else:
                     # 当前状态为 busy, 切换为 speaking
                     self.swap_state(StateBusy, StateSpeaking)
-                    with torch.no_grad():
-                        pred_img_batch = self.avatar_model.inference(self.audio_chunk_batch, self.config)
-
-                    for i, pred in enumerate(pred_img_batch):
-                        frame = self.avatar.render_frame(pred)
-                        video_frame = self._process_video_frame(frame)
-                        audio_frames = audio_frame_batch[
+                    i = 0
+                    for video_frame in self.avatar.speak(audio_chunk_batch, self.config):
+                        audio_frames = audio_chunk_batch[
                                        i * self.frame_multiple:
                                        i * self.frame_multiple + self.frame_multiple]
                         self.frame_queue.put(
                             (video_frame, audio_frames)
                         )
+                        i += 1
 
-                self.audio_chunk_batch = []
                 if is_final:
                     self.set_state(StateReady)
             except Exception as e:
@@ -370,6 +292,8 @@ class HumanContainer:
         if transport.kind == "webrtc":  # 适用于 webrtc, 避免由于 frame 生产速率过快时, track 为了对齐时间戳频繁 wait(不精确), 导致帧跳现象(频繁卡顿或是帧过快)
             res.result()
         for audio_frame in audio_frames:
+            # todo 是否所有 transport 都需要将音频转换为 pcm 格式? 如果不是 把这个代码移到 webrtc 中去
+            audio_frame = (audio_frame * 32767).astype(np.int16)  # to pcm
             res = asyncio.run_coroutine_threadsafe(transport.put_audio_frame(audio_frame), self.loop)
             if transport.kind == "webrtc":
                 res.result()

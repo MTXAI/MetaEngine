@@ -1,13 +1,14 @@
 import asyncio
 from typing import Union, List, Tuple
 
-from engine.human.character.agent.base_agent import BaseAgent
+from engine import runtime
 from engine.config import PlayerConfig
-from engine.human.avatar import AvatarModelWrapper, AvatarProcessor, Avatar
+from engine.human.character.agent import Agent
+from engine.human.avatar import Avatar
 from engine.human.player.container import HumanContainer
 from engine.human.player.state import *
 from engine.transport import Transport
-from engine.human.voice import TTSModelWrapper, VoiceProcessor
+from engine.human.voice import Voice
 from engine.runtime import thread_pool
 from engine.utils.concurrent.pool import TaskInfo
 from engine.utils import Data
@@ -17,12 +18,9 @@ class HumanPlayer:
     def __init__(
             self,
             config: PlayerConfig,
-            agent: BaseAgent,
-            tts_model: TTSModelWrapper,
+            agent: Agent,
+            voice: Voice,
             avatar: Avatar,
-            avatar_model: AvatarModelWrapper,
-            voice_processor: VoiceProcessor,
-            avatar_processor: AvatarProcessor,
             loop: asyncio.AbstractEventLoop,
             transports: Union[Transport, List[Transport], Tuple[Transport]]=None,
     ):
@@ -30,11 +28,8 @@ class HumanPlayer:
         self.container = HumanContainer(
             self.config,
             agent,
-            tts_model,
+            voice,
             avatar,
-            avatar_model,
-            voice_processor,
-            avatar_processor,
             loop,
             transports,
         )
@@ -46,18 +41,18 @@ class HumanPlayer:
     def is_busy(self):
         return self.container.get_state() == StateBusy or self.container.get_state() == StatePause
 
-    def set_agent(self, agent: BaseAgent) -> bool:
+    def set_agent(self, agent: Agent) -> bool:
         # agent 正在使用中
         if self.container.get_state() == StateBusy:
             return False
         self.container.agent = agent
         return True
 
-    def set_tts_model(self, tts_model: TTSModelWrapper) -> bool:
+    def set_voice(self, voice: Voice) -> bool:
         # tts model 正在使用中
         if self.container.get_state() == StateBusy:
             return False
-        self.container.tts_model = tts_model
+        self.container.voice = voice
         return True
 
     def pause(self):
@@ -103,12 +98,12 @@ if __name__ == '__main__':
     from engine.utils.data import Data
     from engine.config import ONE_API_LLM_MODEL
     from engine.human.voice.tts_ali import AliTTSWrapper
-    from engine.human.character.agent.custom import SimpleAgent
+    from engine.human.character.agent import SimpleAgent, Agent
     from engine.utils import get_file_path
     from engine.config import DEFAULT_VOICE_PROCESSOR_CONFIG, DEFAULT_AVATAR_PROCESSOR_CONFIG, WAV2LIP_PLAYER_CONFIG
     from engine.transport import Transport, TransportWebRTC
-    from engine.human.avatar import wav2lip, AvatarProcessor, Wav2LipWrapper
-    from engine.human.voice import VoiceProcessor, AliTTSWrapper, EdgeTTSWrapper
+    from engine.human.avatar import wav2lip, AvatarProcessor
+    from engine.human.voice import VoiceProcessor, AliTTSWrapper
 
     a_f = '../../../avatars/wav2lip256_avatar1'
     a_p = get_file_path(a_f)
@@ -116,7 +111,6 @@ if __name__ == '__main__':
     c_p = get_file_path(c_f)
 
     # 创建Player实例并启动
-    loop = asyncio.new_event_loop()
 
     tts_model = AliTTSWrapper(
         model_str="cosyvoice-v1",
@@ -129,8 +123,8 @@ if __name__ == '__main__':
     #     sample_rate=WAV2LIP_PLAYER_CONFIG.sample_rate,
     # )
 
-    avatar = wav2lip.load_avatar(a_p.absolute().as_posix())
-    avatar_model = wav2lip.Wav2LipWrapper(c_p.absolute().as_posix(), avatar)
+    avatar_resource = wav2lip.load_avatar_resource(a_p.absolute().as_posix())
+    avatar_model = wav2lip.Wav2LipWrapper(c_p.absolute().as_posix())
 
     # llm_model = ChatOpenAI(
     #     model=QWEN_LLM_MODEL.model_id,
@@ -152,15 +146,21 @@ if __name__ == '__main__':
 
     webrtc_transport = TransportWebRTC(WAV2LIP_PLAYER_CONFIG)
 
+    avatar = Avatar(
+        avatar_resource=avatar_resource,
+        avatar_model=avatar_model,
+        avatar_processor=avatar_processor,
+    )
+    voice = Voice(
+        tts_model=tts_model,
+        voice_processor=voice_processor,
+    )
     player = HumanPlayer(
         config=WAV2LIP_PLAYER_CONFIG,
         agent=agent,
-        tts_model=tts_model,
         avatar=avatar,
-        avatar_model=avatar_model,
-        voice_processor=voice_processor,
-        avatar_processor=avatar_processor,
-        loop=loop,
+        voice=voice,
+        loop=runtime.main_loop,
         transports=webrtc_transport,
     )
 
@@ -204,8 +204,7 @@ if __name__ == '__main__':
             logging.info(res_data)
             time.sleep(5)
 
-    asyncio.run_coroutine_threadsafe(listen_audio(), loop=loop)
-    asyncio.run_coroutine_threadsafe(listen_video(), loop=loop)
-    asyncio.run_coroutine_threadsafe(put_text_data(), loop=loop)
-    asyncio.set_event_loop(loop)
-    loop.run_forever()
+    runtime.run_coroutine_threadsafe(listen_audio())
+    runtime.run_coroutine_threadsafe(listen_video())
+    runtime.run_coroutine_threadsafe(put_text_data())
+    runtime.run_forever()
