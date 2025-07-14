@@ -40,13 +40,15 @@ class HumanContainer:
         self.voice_processor = voice_processor
         self.avatar_processor = avatar_processor
         self.loop = loop
+        self.transports = {}
         if transports is not None:
             if isinstance(transports, Transport):
-                self.transports = [transports]
+                self.transports[transports.kind] = transports
             else:
-                self.transports = list(transports)
+                for transport in transports:
+                    self.transports[transport.kind] = transport
         else:
-            self.transports = []
+            self.transports = {}
 
         # from config
         self.fps = config.fps
@@ -89,6 +91,23 @@ class HumanContainer:
 
     def get_state(self):
          return self.state.get_state()
+
+    def add_transport(self, transport: Transport):
+        if transport.kind in self.transports:
+            logging.warning(f"Transport {transport.kind} already exists")
+            return
+        self.transports[transport.kind] = transport
+
+    def remove_transport(self, kind: str):
+        if kind not in self.transports:
+            logging.warning(f"Transport {kind} does not exist")
+            return
+        del self.transports[kind]
+
+    def replace_transport(self, new_transport: Transport):
+        if new_transport.kind not in self.transports:
+            logging.warning(f"Transport {new_transport.kind} does not exist")
+        self.transports[new_transport.kind] = new_transport
 
     def pause(self):
         # 中断数字人当前对话
@@ -362,7 +381,7 @@ class HumanContainer:
             except queue.Empty:
                 continue
 
-            for transport in self.transports:
+            for transport in self.transports.values():
                 self._send_frames(transport, video_frame, audio_frames)
 
     def shutdown(self):
