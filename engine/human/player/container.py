@@ -31,13 +31,16 @@ class HumanContainer:
     ):
         self.config = config
         self.character = character
-        self.avatar = avatar
         self.voice = voice
+        self.avatar = avatar
         self.loop = loop
+
         self.transports = {}
-        if transports is not None:
-            for transport in transports:
-                self.transports[transport.kind] = transport
+        self.audio_only = True
+        for transport in transports:
+            self.transports[transport.kind] = transport
+            if self.audio_only:
+                self.audio_only = transport.audio_only
 
         # from config
         self.fps = config.fps
@@ -257,24 +260,31 @@ class HumanContainer:
                 # process frames
                 silence_flag = 1 if silence else 0
                 self.silence_flag.set(silence_flag)
-                if silence:
-                    i = 0
-                    for video_frame in self.avatar.silence(self.config):
+                if self.audio_only:
+                    for i in range(self.batch_size):
                         audio_frames = audio_chunk_batch[
                                        i * self.frame_multiple:
                                        i * self.frame_multiple + self.frame_multiple]
-                        self.frame_queue.put((video_frame, audio_frames))
-                        i += 1
+                        self.frame_queue.put((None, audio_frames))
                 else:
-                    # 当前状态为 busy, 切换为 speaking
-                    self.swap_state(StateBusy, StateSpeaking)
-                    i = 0
-                    for video_frame in self.avatar.speak(audio_chunk_batch, self.config):
-                        audio_frames = audio_chunk_batch[
-                                       i * self.frame_multiple:
-                                       i * self.frame_multiple + self.frame_multiple]
-                        self.frame_queue.put((video_frame, audio_frames))
-                        i += 1
+                    if silence:
+                        i = 0
+                        for video_frame in self.avatar.silence(self.config):
+                            audio_frames = audio_chunk_batch[
+                                           i * self.frame_multiple:
+                                           i * self.frame_multiple + self.frame_multiple]
+                            self.frame_queue.put((video_frame, audio_frames))
+                            i += 1
+                    else:
+                        # 当前状态为 busy, 切换为 speaking
+                        self.swap_state(StateBusy, StateSpeaking)
+                        i = 0
+                        for video_frame in self.avatar.speak(audio_chunk_batch, self.config):
+                            audio_frames = audio_chunk_batch[
+                                           i * self.frame_multiple:
+                                           i * self.frame_multiple + self.frame_multiple]
+                            self.frame_queue.put((video_frame, audio_frames))
+                            i += 1
 
                 if is_final:
                     self.set_state(StateReady)
@@ -293,14 +303,14 @@ class HumanContainer:
                 continue
 
             for transport in self.transports.values():
-                res = asyncio.run_coroutine_threadsafe(transport.put_video_frame(video_frame), self.loop)
-                if transport.kind == "webrtc":  # 适用于 webrtc, 避免由于 frame 生产速率过快时, track 为了对齐时间戳频繁 wait(不精确), 导致帧跳现象(频繁卡顿或是帧过快)
-                    res.result()
+                if not transport.audio_only:
+                    res = asyncio.run_coroutine_threadsafe(transport.put_video_frame(video_frame), self.loop)
+                    if transport.wait:  # 避免由于 frame 生产速率过快时, 导致帧跳现象(频繁卡顿或是帧过快)
+                        res.result()
                 for audio_frame in audio_frames:
-                    # todo 是否所有 transport 都需要将音频转换为 pcm 格式? 如果不是 把这个代码移到 webrtc 中去
-                    audio_frame = (audio_frame * 32767).astype(np.int16)  # to pcm
+                    audio_frame = (audio_frame * 32767).astype(np.int16)  # to pa_int16
                     res = asyncio.run_coroutine_threadsafe(transport.put_audio_frame(audio_frame), self.loop)
-                    if transport.kind == "webrtc":
+                    if transport.wait:  # 避免由于 frame 生产速率过快时, 导致帧跳现象(频繁卡顿或是帧过快)
                         res.result()
 
     def shutdown(self):

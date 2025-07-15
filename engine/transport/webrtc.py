@@ -13,29 +13,14 @@ from engine.config import PlayerConfig
 from engine.transport import Transport
 
 
-class AudioStreamTrack(MediaStreamTrack):
-    kind = "audio"
-
-    def __init__(self, config: PlayerConfig):
-        super().__init__()
-        self.config = config
-
-        self.queue = asyncio.Queue(config.fps)
-
-        self.rate = config.sample_rate
-        self.ptime = config.audio_ptime
-        self.timebase = fractions.Fraction(1, self.rate)
+class StreamTrackSync:
+    def __init__(self, ptime, rate):
+        self.ptime = ptime
+        self.rate = rate
 
         self.frame_count = 0
         self._timestamp = 0
         self._start_time = 0.0
-
-    async def put_frame(self, frame: AudioFrame):
-        await self.queue.put(frame)
-
-    async def get_frame(self) -> AudioFrame:
-        frame = await self.queue.get()
-        return frame
 
     async def next_timestamp(self):
         if self._start_time == 0:
@@ -49,10 +34,32 @@ class AudioStreamTrack(MediaStreamTrack):
             await asyncio.sleep(wait)
         return self._timestamp
 
+
+class AudioStreamTrack(MediaStreamTrack):
+    kind = "audio"
+
+    def __init__(self, config: PlayerConfig):
+        super().__init__()
+        self.config = config
+
+        self.queue = asyncio.Queue(config.fps)
+
+        self.rate = config.sample_rate
+        self.ptime = config.audio_ptime
+        self.timebase = fractions.Fraction(1, self.rate)
+        self.sync = StreamTrackSync(self.ptime, self.rate)
+
+    async def put_frame(self, frame: AudioFrame):
+        await self.queue.put(frame)
+
+    async def get_frame(self) -> AudioFrame:
+        frame = await self.queue.get()
+        return frame
+
     async def recv(self) -> Union[Frame, Packet]:
         frame = await self.get_frame()
         frame: AudioFrame
-        pts = await self.next_timestamp()
+        pts = await self.sync.next_timestamp()
         frame.pts = pts
         frame.time_base = self.timebase
         return frame
@@ -73,10 +80,7 @@ class VideoStreamTrack(MediaStreamTrack):
         self.rate = config.clock_rate
         self.ptime = config.video_ptime
         self.timebase = fractions.Fraction(1, self.rate)
-
-        self.frame_count = 0
-        self._timestamp = 0
-        self._start_time = 0.0
+        self.sync = StreamTrackSync(self.ptime, self.rate)
 
     async def put_frame(self, frame: VideoFrame):
         await self.queue.put(frame)
@@ -85,22 +89,10 @@ class VideoStreamTrack(MediaStreamTrack):
         frame = await self.queue.get()
         return frame
 
-    async def next_timestamp(self):
-        if self._start_time == 0:
-            self._start_time = time.time()
-            self._timestamp = 0
-            return self._timestamp
-        self._timestamp += int(self.rate * self.ptime)
-        self.frame_count += 1
-        wait = self._start_time + self.frame_count * self.ptime - time.time()
-        if wait > 0:
-            await asyncio.sleep(wait)
-        return self._timestamp
-
     async def recv(self) -> Union[Frame, Packet]:
         frame = await self.get_frame()
         frame: VideoFrame
-        pts = await self.next_timestamp()
+        pts = await self.sync.next_timestamp()
         frame.pts = pts
         frame.time_base = self.timebase
         return frame
@@ -110,6 +102,9 @@ class VideoStreamTrack(MediaStreamTrack):
 
 class TransportWebRTC(Transport):
     kind: str = "webrtc"
+    audio_only: bool = False
+    wait: bool = True
+
     def __init__(self, config: PlayerConfig):
         super().__init__()
         self.audio_track = AudioStreamTrack(config)
@@ -127,9 +122,6 @@ class TransportWebRTC(Transport):
         frame[0, :] &= 0xFE  # 确保第一行是偶数，避免某些视频问题
         new_frame = VideoFrame.from_ndarray(frame, format="bgr24")
         await self.video_track.put_frame(new_frame)
-
-    async def start(self):
-        pass
 
     def stop(self):
         self.audio_track.stop()

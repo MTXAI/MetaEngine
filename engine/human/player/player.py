@@ -100,7 +100,7 @@ if __name__ == '__main__':
     from engine.human.character.agent import SimpleAgent
     from engine.utils import get_file_path
     from engine.config import DEFAULT_VOICE_PROCESSOR_CONFIG, DEFAULT_AVATAR_PROCESSOR_CONFIG, WAV2LIP_PLAYER_CONFIG
-    from engine.transport import Transport, TransportWebRTC
+    from engine.transport import Transport, TransportWebRTC, TransportPyAudio
     from engine.human.avatar import wav2lip, AvatarProcessor
     from engine.human.voice import VoiceProcessor, AliTTSWrapper
     from engine.human.character.processor import BaseProcessor
@@ -149,6 +149,7 @@ if __name__ == '__main__':
     avatar_processor = AvatarProcessor(DEFAULT_AVATAR_PROCESSOR_CONFIG)
 
     webrtc_transport = TransportWebRTC(WAV2LIP_PLAYER_CONFIG)
+    pyaudio_transport = TransportPyAudio(WAV2LIP_PLAYER_CONFIG)
 
     avatar = Avatar(
         avatar_resource=avatar_resource,
@@ -165,9 +166,8 @@ if __name__ == '__main__':
         avatar=avatar,
         voice=voice,
         loop=runtime.main_loop,
-        transports=[webrtc_transport],
+        transports=[pyaudio_transport],
     )
-
     player.start()
 
     async def listen_audio():
@@ -200,13 +200,14 @@ if __name__ == '__main__':
 
     async def put_text_data():
         for i in range(1):
+            time.sleep(5)
             res_data = player.put_text_data(Data(
                 data="介绍故宫",
                 is_chat=True,
                 stream=True,
             ))
             logging.info(res_data)
-            time.sleep(5)
+
 
     runtime.run_coroutine_threadsafe(listen_audio())
     runtime.run_coroutine_threadsafe(listen_video())

@@ -15,7 +15,7 @@ from engine.config import WAV2LIP_PLAYER_CONFIG, DEFAULT_PROJECT_CONFIG, ONE_API
     DEFAULT_VOICE_PROCESSOR_CONFIG, DEFAULT_AVATAR_PROCESSOR_CONFIG
 from engine.human.avatar import wav2lip, AvatarProcessor, Avatar
 from engine.human.player import HumanPlayer
-from engine.transport import TransportWebRTC
+from engine.transport import TransportWebRTC, TransportPyAudio
 from engine.human.voice import AliTTSWrapper, EdgeTTSWrapper, VoiceProcessor, Voice
 from engine.utils import Data
 
@@ -64,7 +64,7 @@ voice_processor = VoiceProcessor(DEFAULT_VOICE_PROCESSOR_CONFIG)
 avatar_processor = AvatarProcessor(DEFAULT_AVATAR_PROCESSOR_CONFIG)
 
 webrtc_transport = TransportWebRTC(WAV2LIP_PLAYER_CONFIG)
-
+pyaudio_transport = TransportPyAudio(WAV2LIP_PLAYER_CONFIG)
 avatar = Avatar(
     avatar_resource=avatar_resource,
     avatar_model=avatar_model,
@@ -80,7 +80,7 @@ player = HumanPlayer(
     avatar=avatar,
     voice=voice,
     loop=runtime.main_loop,
-    transports=[webrtc_transport],
+    transports=[webrtc_transport, pyaudio_transport],
 )
 
 # 存储已连接的客户端
