@@ -3,7 +3,7 @@
 # todo voice, avatar, character 都用 config 来构建, 包括 human 都有对应的 factory
 class Human:
     """
-    数字人构建、组件管理、运行控制、状态查询与功能调用。human 内部组件不可访问(因为接口外部调用没用)
+    数字人构建、组件管理(不提供访问接口)、运行控制、状态查询与功能调用
     1. 视频功能调用, char+voice+avatar,如 pause, speak
     2. 语音功能调用, char+voice
     3. 文字功能调用, char

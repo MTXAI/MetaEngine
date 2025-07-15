@@ -316,4 +316,6 @@ class HumanContainer:
     def shutdown(self):
         self.stop_event.set()
         self.set_state(StateNotReady)
+        for transport in self.transports.values():
+            transport.stop()
 
