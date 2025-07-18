@@ -126,7 +126,9 @@ class SharedFlag:
             new_value: 要设置的新值
         """
         with self._lock.writer_lock():
+            old_value = self._value
             self._value = new_value
+            return old_value
 
     def cas(self, expected_value, new_value):
         """

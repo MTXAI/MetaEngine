@@ -123,6 +123,6 @@ class TransportWebRTC(Transport):
         new_frame = VideoFrame.from_ndarray(frame, format="bgr24")
         await self.video_track.put_frame(new_frame)
 
-    def stop(self):
+    def shutdown(self):
         self.audio_track.stop()
         self.video_track.stop()

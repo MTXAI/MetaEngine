@@ -57,10 +57,10 @@ class Voice:
     def __init__(
         self,
         tts_model: TTSModelWrapper,
+        # todo svc model
         voice_processor: VoiceProcessor,
     ):
         self.tts_model = tts_model
-        # todo process 做变声或其他处理
         self.voice_processor = voice_processor
 
     def speak(self, text: str) -> Optional[np.ndarray]:

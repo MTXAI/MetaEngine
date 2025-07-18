@@ -6,6 +6,7 @@ StateReady = 0
 StateBusy = 1
 StateSpeaking = 2
 StatePause = 3
+StateSuspend = 4
 state_str = {
     StateNotReady: "StateNotReady",
     StateReady: "StateReady",
@@ -25,7 +26,7 @@ class HumanState:
         return self.state.cas(expected_state, new_state)
 
     def set_state(self, state: int):
-        self.state.set(state)
+        return self.state.set(state)
 
     def get_state(self):
         return self.state.get()

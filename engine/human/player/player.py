@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Union, List, Tuple
 
 from engine import runtime
@@ -24,43 +25,70 @@ class HumanPlayer:
             transports: List[Transport]=None,
     ):
         self.config = config
+        self._state = HumanState(StateReady)
         self.container = HumanContainer(
             self.config,
             character,
             voice,
             avatar,
+            self._state,
             loop,
             transports,
         )
         self._start = False
 
     def is_ready(self):
-        return self.container.get_state() == StateReady
+        return self._state.get_state() == StateReady
+
+    def is_speaking(self):
+        return self._state.get_state() == StateSpeaking
+
+    def is_pause(self):
+        return self._state.get_state() == StatePause
 
     def is_busy(self):
-        return self.container.get_state() == StateBusy or self.container.get_state() == StatePause
+        return self._state.get_state() == StateBusy
+
+    def add_transport(self, transport: Transport):
+        if transport.kind in self.container.transports:
+            logging.warning(f"Transport {transport.kind} already exists")
+            return
+        self.container.transports[transport.kind] = transport
+
+    def remove_transport(self, kind: str):
+        if kind not in self.container.transports:
+            logging.warning(f"Transport {kind} does not exist")
+            return
+        del self.container.transports[kind]
+
+    def replace_transport(self, new_transport: Transport):
+        if new_transport.kind not in self.container.transports:
+            logging.warning(f"Transport {new_transport.kind} does not exist")
+        self.container.transports[new_transport.kind] = new_transport
 
     def set_character(self, character: Character) -> bool:
-        # agent 正在使用中
-        if self.container.get_state() == StateBusy:
+        if self.is_busy():
             return False
         self.container.character = character
         return True
 
     def set_voice(self, voice: Voice) -> bool:
-        # tts model 正在使用中
-        if self.container.get_state() == StateBusy:
+        if self.is_busy():
             return False
         self.container.voice = voice
         return True
 
     def pause(self):
-        self.container.pause()
+        if self.container.pause():
+            return True
+        else:
+            logging.info(f"pause failed, human state is {state_str[self._state.get_state()]}")
+            return False
 
-    def put_text_data(self, data: Data, force=False):
+    def speak(self, data: Data, force=False):
         return self.container.put_text_data(data, force)
 
-    def start(self):
+    def run(self):
         if self._start:
             return
         runtime.submit_task(
@@ -168,7 +196,7 @@ if __name__ == '__main__':
         loop=runtime.main_loop,
         transports=[pyaudio_transport],
     )
-    player.start()
+    player.run()
 
     async def listen_audio():
         i = 0
@@ -201,7 +229,7 @@ if __name__ == '__main__':
     async def put_text_data():
         for i in range(1):
             time.sleep(5)
-            res_data = player.put_text_data(Data(
+            res_data = player.speak(Data(
                 data="介绍故宫",
                 is_chat=True,
                 stream=True,

@@ -26,6 +26,7 @@ class HumanContainer:
             character: Character,
             voice: Voice,
             avatar: Avatar,
+            state: HumanState,
             loop: asyncio.AbstractEventLoop,
             transports: List[Transport]=None,
     ):
@@ -50,7 +51,7 @@ class HumanContainer:
         self.batch_size = config.batch_size
 
         # runtime control
-        self.state =  HumanState(StateReady)
+        self.state =  state
         self.stop_event = threading.Event()
 
         # data flow
@@ -62,54 +63,25 @@ class HumanContainer:
         self.audio_data_fragment = None
         self.silence_flag = SharedFlag(1)  # 1 静音 0 发声
 
-    def swap_state(self, old_state: int, new_state: int):
-        res = self.state.swap_state(old_state, new_state)
-        if res:
-            logging.info(f"swap: {state_str[old_state]} -> {state_str[new_state]}")
-        return res
-
-    def set_state(self, state: int):
-        logging.info(f"set:  {state_str[self.state.get_state()]} -> {state_str[state]}")
-        self.state.set_state(state)
-
-    def get_state(self):
-         return self.state.get_state()
-
-    def add_transport(self, transport: Transport):
-        if transport.kind in self.transports:
-            logging.warning(f"Transport {transport.kind} already exists")
-            return
-        self.transports[transport.kind] = transport
-
-    def remove_transport(self, kind: str):
-        if kind not in self.transports:
-            logging.warning(f"Transport {kind} does not exist")
-            return
-        del self.transports[kind]
-
-    def replace_transport(self, new_transport: Transport):
-        if new_transport.kind not in self.transports:
-            logging.warning(f"Transport {new_transport.kind} does not exist")
-        self.transports[new_transport.kind] = new_transport
-
-    def pause(self):
+    def pause(self) -> bool:
         # 中断数字人当前对话
-        if self.swap_state(StateSpeaking, StatePause) or self.swap_state(StateBusy, StatePause):
+        if self.state.swap_state(StateSpeaking, StatePause) or self.state.swap_state(StateBusy, StatePause):
             self.text_queue.queue.clear()
             self.audio_queue.queue.clear()
             self.audio_data_fragment = None
+            return True
         else:
-            logging.info(f"pause failed, human state is {state_str[self.get_state()]}")
+            return False
 
     def put_text_data(self, data: Data, force=False):
         if force:
-            self.set_state(StateReady)
+            self.state.set_state(StateReady)
         if self.silence_flag.get() == 1:
-            self.swap_state(StatePause, StateReady)
-        if not self.swap_state(StateReady, StateBusy):
+            self.state.swap_state(StatePause, StateReady)
+        if not self.state.swap_state(StateReady, StateBusy):
             return Data(
                 ok=False,
-                msg=f"human state not ready, state is {state_str[self.get_state()]}",
+                msg=f"human state not ready, state is {state_str[self.state.get_state()]}",
             )
 
         # 文字预处理操作
@@ -144,7 +116,7 @@ class HumanContainer:
         return audio_data_chunks
 
     def _produce_audio_data(self, speech: np.ndarray):
-        if self.get_state() == StatePause:
+        if self.state.get_state() == StatePause:
             return
         if speech is None:
             return
@@ -165,7 +137,10 @@ class HumanContainer:
 
     def _streaming_answer_generator(self, text: str):
         for answer in self.character.stream_answer(question=text):
-            yield answer, self.get_state() == StatePause
+            if self.state.get_state() == StatePause:
+                break
+            else:
+                yield answer, False
         yield "", True
 
     def process_text_data_worker(self):
@@ -182,7 +157,6 @@ class HumanContainer:
             text = text_data.get("data")
             is_chat = text_data.get("is_chat", False)
             stream = text_data.get("stream")
-            logging.info(f"开始消费文本数据: {text}, is_chat={is_chat}, stream={stream}")
             try:
                 if not is_chat:
                     speech = self.voice.speak(text)
@@ -204,10 +178,10 @@ class HumanContainer:
                     )
                 )
             except Exception as e:
-                logging.info(f"Process text data error: {e}, text: {text_data.get('data')}")
+                logging.error(f"Process text data error: {e}, text: {text_data.get('data')}")
                 traceback.print_exc()
                 # 遇到错误, 状态重置为 ready
-                self.set_state(StateReady)
+                self.state.set_state(StateReady)
                 continue
 
     def _read_audio_frame(self):
@@ -218,7 +192,7 @@ class HumanContainer:
             if chunk is None:
                 chunk = np.zeros(self.chunk_size, dtype=np.float32)
                 state = 0
-            if self.get_state() == StatePause:
+            if self.state.get_state() == StatePause:
                 chunk = np.zeros(self.chunk_size, dtype=np.float32)
                 state = 0
             is_final = audio_data.get("is_final")
@@ -271,7 +245,7 @@ class HumanContainer:
                             i += 1
                     else:
                         # 当前状态为 busy, 切换为 speaking
-                        self.swap_state(StateBusy, StateSpeaking)
+                        self.state.swap_state(StateBusy, StateSpeaking)
                         i = 0
                         for video_frame in self.avatar.speak(audio_chunk_batch, self.config):
                             audio_frames = audio_chunk_batch[
@@ -281,11 +255,11 @@ class HumanContainer:
                             i += 1
 
                 if is_final:
-                    self.set_state(StateReady)
+                    self.state.set_state(StateReady)
             except Exception as e:
-                logging.info(f"Process audio data error: {e}")
+                logging.error(f"Process audio data error: {e}")
                 traceback.print_exc()
-                self.set_state(StateReady)
+                self.state.set_state(StateReady)
                 time.sleep(self.timeout)
                 continue
 
@@ -309,7 +283,6 @@ class HumanContainer:
 
     def shutdown(self):
         self.stop_event.set()
-        self.set_state(StateNotReady)
+        self.state.set_state(StateNotReady)
         for transport in self.transports.values():
-            transport.stop()
-
+            transport.shutdown()

@@ -12,5 +12,5 @@ class Transport:
     async def put_video_frame(self, frame: np.ndarray):
         pass
 
-    def stop(self):
+    def shutdown(self):
         pass

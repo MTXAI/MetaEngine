@@ -183,22 +183,24 @@ async def websocket_handler(request):
     return ws
 
 async def pause(request):
-    res_data = player.pause()
-    return web.json_response({"status": "success", "data": res_data})
-
+    ok = player.pause()
+    if ok:
+        return web.json_response({"status": "success"})
+    else:
+        return web.json_response({"status": "error", "message": "failed"}, status=400)
 
 # echo 接口
 async def echo(request):
     data = await request.json()
     text = data.get('text')
     if text and not player.is_busy():
-        res_data = player.put_text_data(
+        res_data = player.speak(
             Data(
                 data=text,
                 is_chat=False,
                 stream=False,
             ),
-            # force=True,
+            force=True,
         )
         logging.info(res_data)
         return web.json_response({"status": "success", "data": res_data})
@@ -211,13 +213,13 @@ async def chat(request):
     data = await request.json()
     question = data.get('question')
     if question and not player.is_busy():
-        res_data = player.put_text_data(
+        res_data = player.speak(
             Data(
                 data=question,
                 is_chat=True,
                 stream=True,
             ),
-            # force=True,
+            force=True,
         )
         logging.info(res_data)
         return web.json_response({"status": "success", "data": res_data})
@@ -240,7 +242,7 @@ def main():
     site = web.TCPSite(runner, "0.0.0.0", 8080)
     runtime.run_until_complete(site.start())
 
-    player.start()
+    player.run()
 
     logging.info("服务器已启动，访问 http://localhost:8080")
     runtime.run_forever()

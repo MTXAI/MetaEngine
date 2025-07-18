@@ -12,7 +12,7 @@ class PipelineCallback:
     def on_error(self, e: Exception):
         pass
 
-    def on_stop(self, module: str=""):
+    def on_shutdown(self, module: str= ""):
         pass
 
 
@@ -20,7 +20,7 @@ class TODOPipelineCallback(PipelineCallback):
     def on_error(self, e: Exception):
         logging.info('error', e)
 
-    def on_stop(self, module: str=""):
+    def on_shutdown(self, module: str= ""):
         logging.info('stop', module)
 
 
@@ -67,7 +67,7 @@ class Pipeline:
             traceback.print_exc()
         self._produce_event.set()
         for c in self.callbacks:
-            c.on_stop(f"{self.name}.producer")
+            c.on_shutdown(f"{self.name}.producer")
 
     def consume_worker(self):
         while not self._produce_event.is_set() or not self.queue.empty():
@@ -82,12 +82,12 @@ class Pipeline:
                 traceback.print_exc()
         self._consume_event.set()
         for c in self.callbacks:
-            c.on_stop(f"{self.name}.consumer")
+            c.on_shutdown(f"{self.name}.consumer")
 
     def shutdown(self):
         self._stop_event.set()
         for c in self.callbacks:
-            c.on_stop(f"{self.name}")
+            c.on_shutdown(f"{self.name}")
 
 class AsyncPipeline:
     def __init__(
@@ -134,7 +134,7 @@ class AsyncPipeline:
                 c.on_error(e)
             traceback.print_exc()
         for c in self.callbacks:
-            c.on_stop(f"{self.name}.producer")
+            c.on_shutdown(f"{self.name}.producer")
 
     async def consume_worker(self):
         while not self._stop_event.is_set() or not self.queue.empty():
@@ -151,10 +151,10 @@ class AsyncPipeline:
                     c.on_error(e)
                 traceback.print_exc()
         for c in self.callbacks:
-            c.on_stop(f"{self.name}.consumer")
+            c.on_shutdown(f"{self.name}.consumer")
 
     def shutdown(self):
         self._stop_event.set()
         for c in self.callbacks:
-            c.on_stop(f"{self.name}")
+            c.on_shutdown(f"{self.name}")
 
