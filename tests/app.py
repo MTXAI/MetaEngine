@@ -80,7 +80,7 @@ player = HumanPlayer(
     avatar=avatar,
     voice=voice,
     loop=runtime.main_loop,
-    transports=[webrtc_transport, pyaudio_transport],
+    transports=[webrtc_transport],
 )
 
 # 存储已连接的客户端

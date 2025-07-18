@@ -101,16 +101,10 @@ class HumanContainer:
         else:
             logging.info(f"pause failed, human state is {state_str[self.get_state()]}")
 
-    def _need_resume(self):
-        if self.get_state() == StatePause and self.silence_flag.get() == 1:
-            return True
-        else:
-            return False
-
     def put_text_data(self, data: Data, force=False):
         if force:
             self.set_state(StateReady)
-        if self._need_resume():
+        if self.silence_flag.get() == 1:
             self.swap_state(StatePause, StateReady)
         if not self.swap_state(StateReady, StateBusy):
             return Data(
