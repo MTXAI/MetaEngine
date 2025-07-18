@@ -117,6 +117,9 @@ class Wav2LipWrapper(AvatarModelWrapper):
             audio_feature_batch = audio_feature_batch.unsqueeze(-1)
         audio_feature_batch = audio_feature_batch.permute(0, 3, 1, 2)
         face_img_batch = face_img_batch.permute(0, 3, 1, 2)
+        if DEFAULT_RUNTIME_CONFIG.use_fp16:
+            audio_feature_batch = audio_feature_batch.half()
+            face_img_batch = face_img_batch.half()
         pred_img_batch = self.backbone(audio_feature_batch, face_img_batch)
         pred_img_batch = pred_img_batch.cpu().numpy().transpose(0, 2, 3, 1) * 255.
         return pred_img_batch
