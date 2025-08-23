@@ -6,7 +6,7 @@ from engine.utils.config import EasyConfig
 
 
 # 存放各类配置, 临时方案
-
+# todo 优化精简各类配置
 
 class ProjectConfig(EasyConfig):
     root_path: Path
@@ -141,14 +141,3 @@ class HumanConfig(EasyConfig):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-
-DEFAULT_HUMAN_CONFIG = HumanConfig(
-    dict(
-        player_config=WAV2LIP_PLAYER_CONFIG,
-        voice_type="ali",
-        character_type="simple",
-        avatar_type="wav2lip",
-        transport_types=["webrtc", "pyaudio"],
-        # todo 其他配置, 如 processor 等
-    )
-)
