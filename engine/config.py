@@ -130,3 +130,25 @@ class AvatarProcessorConfig(EasyConfig):
 DEFAULT_AVATAR_PROCESSOR_CONFIG = AvatarProcessorConfig(
     dict()
 )
+
+
+class HumanConfig(EasyConfig):
+    player_config: PlayerConfig
+    voice_type: str
+    character_type: str
+    avatar_type: str
+    transport_types: list
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+DEFAULT_HUMAN_CONFIG = HumanConfig(
+    dict(
+        player_config=WAV2LIP_PLAYER_CONFIG,
+        voice_type="ali",
+        character_type="simple",
+        avatar_type="wav2lip",
+        transport_types=["webrtc", "pyaudio"],
+        # todo 其他配置, 如 processor 等
+    )
+)

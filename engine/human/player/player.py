@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from typing import Union, List, Tuple
 
@@ -48,6 +49,9 @@ class HumanPlayer:
 
     def is_busy(self):
         return self._state.get_state() == StateBusy
+
+    def state(self):
+        return self._state.get_state()
 
     def add_transport(self, transport: Transport):
         if transport.kind in self.container.transports:
