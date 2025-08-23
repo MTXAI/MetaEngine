@@ -1,65 +1,65 @@
+from engine import runtime
+from engine.config import PlayerConfig, HumanConfig
+from engine.human.avatar import Avatar
+from engine.human.character import Character
+from engine.human.player import HumanPlayer
+from engine.human.voice import Voice
+from engine.utils import Data
 
 
-# todo voice, avatar, character 都用 config 来构建, 包括 human 都有对应的 factory
 class Human:
-    """
-    数字人构建、组件管理(不提供访问接口)、运行控制、状态查询与功能调用
-    1. 视频功能调用, char+voice+avatar,如 pause, speak
-    2. 语音功能调用, char+voice
-    3. 文字功能调用, char
-    """
-    def __init__(self, voice=None, avatar=None, character=None):
-        pass
+    def __init__(
+            self, player_config, voice, avatar, character, transports
+    ):
+        self.player = HumanPlayer(
+            config=player_config,
+            character=character,
+            avatar=avatar,
+            voice=voice,
+            loop=runtime.main_loop,
+            transports=transports,
+        )
 
-    # ----------------- 构建与组件更新接口 -----------------
-    def change_voice(self, new_voice):
-        """
-        更换数字人语音组件。
-        :param new_voice: 新的语音组件实例
-        """
-        self.voice = new_voice
+    def change_voice(self, new_voice) -> bool:
+        return self.player.set_voice(new_voice)
 
-    def change_avatar(self, new_avatar):
-        """
-        更换数字人形象组件。
-        :param new_avatar: 新的形象组件实例
-        """
-        self.avatar = new_avatar
+    def change_character(self, new_character) -> bool:
+        return self.player.set_character(new_character)
 
-    def change_character(self, new_character):
-        """
-        更换数字人人设组件。
-        :param new_character: 新的人设组件实例
-        """
-        self.character = new_character
-
-    # ----------------- 运行控制接口 -----------------
     def startup(self):
-        pass
+        self.player.run()
 
     def pause(self):
-        pass
-
-    def sleep(self):
-        pass
+        return self.player.pause()
 
     def shutdown(self):
-        pass
+        self.player.shutdown()
 
-    def reboot(self):
-        pass
+    def status(self) -> int:
+        return self.player.state()
 
-    # ----------------- 查询接口 -----------------
-    def status(self):
-        pass
+    def say(self, text, force=False) -> bool:
+        data = Data(
+            data=text,
+            is_chat=False,
+            stream=False,
+        )
+        res = self.player.speak(data, force=force)
+        return res.ok
 
-    # ----------------- 功能调用接口 -----------------
-    def say(self, text):
-        pass
-
-    def answer(self, question):
-        pass
+    def answer(self, question, force=False) -> bool:
+        data = Data(
+            data=question,
+            is_chat=True,
+            stream=True,
+        )
+        res = self.player.speak(data, force=force)
+        return res.ok
 
     def execute(self):
+        """
+        todo 执行某些规划好的指令
+        :return:
+        """
         pass
 

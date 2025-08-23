@@ -6,7 +6,7 @@ from engine.utils.config import EasyConfig
 
 
 # 存放各类配置, 临时方案
-
+# todo 优化精简各类配置
 
 class ProjectConfig(EasyConfig):
     root_path: Path
@@ -130,3 +130,14 @@ class AvatarProcessorConfig(EasyConfig):
 DEFAULT_AVATAR_PROCESSOR_CONFIG = AvatarProcessorConfig(
     dict()
 )
+
+
+class HumanConfig(EasyConfig):
+    player_config: PlayerConfig
+    voice_type: str
+    character_type: str
+    avatar_type: str
+    transport_types: list
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+

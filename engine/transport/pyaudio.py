@@ -30,7 +30,7 @@ class TransportPyAudio(Transport):
     async def put_video_frame(self, frame: np.ndarray):
         pass
 
-    def stop(self):
+    def shutdown(self):
         if self.stream is not None:
             self.stream.stop_stream()
             self.stream.close()

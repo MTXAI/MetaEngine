@@ -7,6 +7,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, RTCRtpSender
 from langchain_openai import ChatOpenAI
 
 from engine import runtime
+from engine.human import Human
 from engine.human.character import Character
 from engine.human.character.processor import BaseProcessor
 from engine.human.character.agent import KnowledgeAgent, SimpleAgent
@@ -74,12 +75,20 @@ voice = Voice(
     tts_model=tts_models[tts_model_idx],
     voice_processor=voice_processor,
 )
-player = HumanPlayer(
-    config=WAV2LIP_PLAYER_CONFIG,
+# player = HumanPlayer(
+#     config=WAV2LIP_PLAYER_CONFIG,
+#     character=character,
+#     avatar=avatar,
+#     voice=voice,
+#     loop=runtime.main_loop,
+#     transports=[webrtc_transport],
+# )
+
+human = Human(
+    player_config=WAV2LIP_PLAYER_CONFIG,
     character=character,
     avatar=avatar,
     voice=voice,
-    loop=runtime.main_loop,
     transports=[webrtc_transport],
 )
 
@@ -183,25 +192,19 @@ async def websocket_handler(request):
     return ws
 
 async def pause(request):
-    res_data = player.pause()
-    return web.json_response({"status": "success", "data": res_data})
-
+    ok = human.pause()
+    if ok:
+        return web.json_response({"status": "success"})
+    else:
+        return web.json_response({"status": "error", "message": "failed"}, status=400)
 
 # echo 接口
 async def echo(request):
     data = await request.json()
     text = data.get('text')
-    if text and not player.is_busy():
-        res_data = player.put_text_data(
-            Data(
-                data=text,
-                is_chat=False,
-                stream=False,
-            ),
-            # force=True,
-        )
-        logging.info(res_data)
-        return web.json_response({"status": "success", "data": res_data})
+    if text:
+        ok = human.say(text)
+        return web.json_response({"status": "success", "data": ok})
 
     return web.json_response({"status": "error", "message": "Missing text parameter"}, status=400)
 
@@ -210,17 +213,9 @@ async def echo(request):
 async def chat(request):
     data = await request.json()
     question = data.get('question')
-    if question and not player.is_busy():
-        res_data = player.put_text_data(
-            Data(
-                data=question,
-                is_chat=True,
-                stream=True,
-            ),
-            # force=True,
-        )
-        logging.info(res_data)
-        return web.json_response({"status": "success", "data": res_data})
+    if question:
+        ok = human.answer(question)
+        return web.json_response({"status": "success", "data": ok})
     return web.json_response({"status": "error", "message": "Missing question parameter"}, status=400)
 
 
@@ -240,7 +235,7 @@ def main():
     site = web.TCPSite(runner, "0.0.0.0", 8080)
     runtime.run_until_complete(site.start())
 
-    player.start()
+    human.startup()
 
     logging.info("服务器已启动，访问 http://localhost:8080")
     runtime.run_forever()

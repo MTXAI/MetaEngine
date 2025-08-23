@@ -149,7 +149,7 @@
       <!-- 输入框和按钮 -->
       <div class="mb-6">
         <input type="text" id="inputText" class="bg-gray-800 border border-gray-700 rounded-lg p-2 w-full mb-2" placeholder="输入要复述的文字或问题">
-        <button id="pauseBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg mr-2">中止</button>
+        <button id="pauseBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg mr-2">中断</button>
         <button id="echoBtn" class="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg mr-2">复述</button>
         <button id="chatBtn" class="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg">对话</button>
       </div>
@@ -609,12 +609,12 @@
           });
           const data = await response.json();
           if (data.status === 'success') {
-            log('中止请求发送成功', 'success');
+            log('中断讲话请求发送成功', 'success');
           } else {
-            log(`中止请求失败: ${data.message}`, 'error');
+            log(`中断讲话请求失败: ${data.message}`, 'error');
           }
         } catch (error) {
-          log(`发送中止请求时发生错误: ${error.message}`, 'error');
+          log(`发送中断讲话请求时发生错误: ${error.message}`, 'error');
         }
     }
 
